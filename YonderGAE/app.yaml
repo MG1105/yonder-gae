@@ -4,6 +4,10 @@ runtime: python27
 api_version: 1
 threadsafe: true
 
+libraries:
+- name: MySQLdb
+  version: "latest"
+
 handlers:
 - url: /.*
-  script: api.sample.app
+  script: api.main.app
