@@ -86,17 +86,69 @@ class YonderDb(object):
 
 	def get_comments(self, video_id):
 		comment_list = []
-		query = "select comment_id, comment from comments where video_id = '%s' and visible = 1"  % (video_id)
+		query = "select comment_id, comment from comments where video_id = '%s' and visible = 1" % video_id
 		self.connect()
 		self.cur.execute(query)
 		logging.debug("Executing " + query)
 		for row in self.cur.fetchall():
 			comment = {"id": row[0], "content": row[1]}
 			comment_list.append(comment)
+		self.cur.close()
+		self.conn.close()
 		return comment_list
+
+	def flag_video(self, video_id):
+		self.connect()
+		query = "update videos set flag=flag+1 where video_id = '%s'" % video_id
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def flag_comment(self, comment_id):
+		self.connect()
+		query = "update comments set flag=flag+1 where comment_id = '%s'" % comment_id
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def rate_video(self,video_id, rating):
+		self.connect()
+		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def get_user_info(self, user_id):
+		query = "select warn, ban from users where user_id = '%s'" % user_id
+		self.connect()
+		self.cur.execute(query)
+		logging.debug("Executing " + query)
+		row = self.cur.fetchone()
+		if row is not None:
+			info = {"warn": row[0], "ban": row[1]}
+		else:
+			query = "insert into users values ('%s', NULL, NULL, NULL)" % user_id
+			self.cur.execute(query)
+			self.conn.commit()
+			info = {"warn": None, "ban": None}
+		return info
+
+	def user_warned(self, user_id):
+		self.connect()
+		query = "update users set warn=0 where user_id = '%s'" % user_id
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
 
 
 
 # Test caption and comments with quotes
-# Add PK to video_id in videos and location
 # Cron job to delete videos > 24H every hour

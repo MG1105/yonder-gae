@@ -1,5 +1,4 @@
 from db import YonderDb
-import logging
 
 class Comment (object):
 
@@ -12,3 +11,7 @@ class Comment (object):
 		yonderdb = YonderDb()
 		comment_list = yonderdb.get_comments(video_id)
 		return comment_list
+
+	def add_flag(self, comment_id):
+		yonderdb = YonderDb()
+		yonderdb.flag_comment(comment_id)

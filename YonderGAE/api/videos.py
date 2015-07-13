@@ -46,3 +46,12 @@ class Feed(object):
 			yonderdb.add_seen(user_id, video_ids)
 		yonderdb.update_last_request(user_id) # Keep it client side?
 		return videos_info
+
+class Video(object):
+	def add_flag(self, video_id):
+		yonderdb = YonderDb()
+		yonderdb.flag_video(video_id)
+
+	def add_rating(self, video_id, rating):
+		yonderdb = YonderDb()
+		yonderdb.rate_video(video_id, int(rating))

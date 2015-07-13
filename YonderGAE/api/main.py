@@ -4,6 +4,8 @@ import json
 from videos import Upload
 from videos import Feed
 from comments import Comment
+from videos import Video
+from util import User
 
 class Videos(webapp2.RequestHandler):
 
@@ -75,8 +77,76 @@ class Comments(webapp2.RequestHandler):
 			out = {"success": 1, "comments": comment_list}
 			self.response.write(json.dumps(out))
 
+class ReportVideo(webapp2.RequestHandler):
+
+	def post(self, video_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			report = Video()
+			report.add_flag(video_id)
+		except Exception:
+			logging.exception("Failed to report video %s" % video_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Video reported successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
+class ReportComment(webapp2.RequestHandler):
+
+	def post(self, comment_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			comment = Comment()
+			comment.add_flag(comment_id)
+		except Exception:
+			logging.exception("Failed to report comment %s" % comment_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Comment reported successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
+class VideoRating(webapp2.RequestHandler):
+
+	def post(self, video_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			rating = self.request.POST["rating"]
+			video = Video()
+			video.add_rating(video_id, rating)
+		except Exception:
+			logging.exception("Failed to add video rating")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Video rating added successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
+class Verify(webapp2.RequestHandler):
+
+	def get(self, user_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user = User()
+			user_info = user.verify(user_id)
+		except Exception:
+			logging.exception("Failed verifying user %s" % user_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("User info retrieved successfully")
+			out = {"success": 1, "user": user_info}
+			self.response.write(json.dumps(out))
 
 
 
 app = webapp2.WSGIApplication([(r"/videos", Videos),
-                               (r"/videos/(\d+)/comments", Comments)], debug=True)
+                               (r"/videos/(\d+)/comments", Comments),
+                               (r"/videos/(\d+)/flag", ReportVideo),
+                               (r"/comments/(\d+)/flag", ReportComment),
+                               (r"/videos/(\d+)/rating", VideoRating),
+                               (r"/users/(\d+)/verify", Verify)], debug=True)
