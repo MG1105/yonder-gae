@@ -14,7 +14,7 @@ class Upload(object):
 	def add_video(self, video, caption, user_id, longitude, latitude):
 		file_name = "/yander/" + video.filename
 		logging.info("Adding new video %s" % video.filename[:-4])
-		logging.debug("Caption %s User %s Longitude %s Latitude %s") % (caption, user_id, longitude, latitude)
+		logging.debug("Caption '%s' User %s Longitude %s Latitude %s" % (caption, user_id, longitude, latitude))
 		write_retry_params = gcs.RetryParams(backoff_factor=1.1)
 		gcs_file = gcs.open(file_name,
 		                    "w",
@@ -40,12 +40,18 @@ class Feed(object):
 		rlat2 = latitude + (radius / 69)
 		yonderdb = YonderDb()
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2)
+		yonderdb.add_seen(user_id, video_ids)
+		yonderdb.update_last_request(user_id) # Keep it client side?
+		return video_ids
+
+	def get_videos_info(self, ids):
+		video_ids = ids.split("xxx")
+		yonderdb = YonderDb()
 		videos_info = []
 		if len(video_ids) > 0:
 			videos_info = yonderdb.get_video_info(video_ids)
-			yonderdb.add_seen(user_id, video_ids)
-		yonderdb.update_last_request(user_id) # Keep it client side?
 		return videos_info
+
 
 class Video(object):
 	def add_flag(self, video_id):

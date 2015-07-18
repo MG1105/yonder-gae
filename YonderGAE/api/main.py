@@ -13,7 +13,7 @@ class Videos(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			video = self.request.POST.multi["uploadedfile"]
-			caption = self.request.POST.multi["caption"]
+			caption = self.request.get("caption")
 			user_id = self.request.get("user")
 			longitude = self.request.get("long")
 			latitude = self.request.get("lat")
@@ -35,7 +35,24 @@ class Videos(webapp2.RequestHandler):
 			latitude = self.request.GET["lat"]
 			user_id = self.request.GET["user"]
 			feed = Feed()
-			videos_info = feed.get_videos(user_id, longitude, latitude)
+			video_ids = feed.get_videos(user_id, longitude, latitude)
+		except Exception:
+			logging.exception("Failed looking for videos")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Video Ids retrieved successfully")
+			out = {"success": 1, "videos": video_ids}
+			self.response.write(json.dumps(out))
+
+class VideosInfo(webapp2.RequestHandler):
+
+	def get(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			ids = self.request.GET["ids"]
+			feed = Feed()
+			videos_info = feed.get_videos_info(ids)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}
@@ -145,6 +162,7 @@ class Verify(webapp2.RequestHandler):
 
 
 app = webapp2.WSGIApplication([(r"/videos", Videos),
+                               (r"/videos/info", VideosInfo),
                                (r"/videos/(\d+)/comments", Comments),
                                (r"/videos/(\d+)/flag", ReportVideo),
                                (r"/comments/(\d+)/flag", ReportComment),
