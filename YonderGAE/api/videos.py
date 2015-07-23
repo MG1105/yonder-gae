@@ -44,8 +44,12 @@ class Feed(object):
 		yonderdb.update_last_request(user_id) # Keep it client side?
 		return video_ids
 
-	def get_videos_info(self, ids):
-		video_ids = ids.split("xxx")
+	def get_my_videos(self, user_id, uploaded, commented):
+		yonderdb = YonderDb()
+		video_ids = yonderdb.get_my_videos(user_id, uploaded, commented)
+		return video_ids
+
+	def get_videos_info(self, video_ids):
 		yonderdb = YonderDb()
 		videos_info = []
 		if len(video_ids) > 0:

@@ -34,8 +34,12 @@ class Videos(webapp2.RequestHandler):
 			longitude = self.request.GET["long"]
 			latitude = self.request.GET["lat"]
 			user_id = self.request.GET["user"]
+			search_type = self.request.GET["search"]
 			feed = Feed()
-			video_ids = feed.get_videos(user_id, longitude, latitude)
+			if search_type == "near":
+				video_ids = feed.get_videos(user_id, longitude, latitude)
+			else:
+				video_ids = feed.get_my_videos(user_id, True, True)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}
@@ -50,9 +54,10 @@ class VideosInfo(webapp2.RequestHandler):
 	def get(self):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
-			ids = self.request.GET["ids"]
+			ids = self.request.GET["ids"] # could reach a limit?
+			video_ids = ids.split("xxx")
 			feed = Feed()
-			videos_info = feed.get_videos_info(ids)
+			videos_info = feed.get_videos_info(video_ids)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}
@@ -69,8 +74,9 @@ class Comments(webapp2.RequestHandler):
 		try:
 			user_id = self.request.POST["user"]
 			text = self.request.POST["comment"]
+			comment_id = self.request.POST["id"]
 			comment = Comment()
-			comment.add_comment(text, video_id, user_id)
+			comment.add_comment(comment_id, text, video_id, user_id)
 		except Exception:
 			logging.exception("Failed to add a comment")
 			out = {"success": 0}
@@ -126,6 +132,23 @@ class ReportComment(webapp2.RequestHandler):
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
+class RateComment(webapp2.RequestHandler):
+
+	def post(self, comment_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			rating = self.request.POST["rating"]
+			comment = Comment()
+			comment.rate_comment(comment_id, rating)
+		except Exception:
+			logging.exception("Failed to rate comment %s" % comment_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Comment rated successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
 class VideoRating(webapp2.RequestHandler):
 
 	def post(self, video_id):
@@ -159,12 +182,32 @@ class Verify(webapp2.RequestHandler):
 			out = {"success": 1, "user": user_info}
 			self.response.write(json.dumps(out))
 
+class MyVideosInfo(webapp2.RequestHandler):
+
+	def get(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.GET["user"]
+			feed = Feed()
+			ids = feed.get_my_videos(user_id, True, False)
+			videos_info = feed.get_videos_info(ids)
+		except Exception:
+			logging.exception("Failed looking for videos")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Video Ids retrieved successfully")
+			out = {"success": 1, "videos": videos_info}
+			self.response.write(json.dumps(out))
 
 
+# Every request associated to user id
 app = webapp2.WSGIApplication([(r"/videos", Videos),
                                (r"/videos/info", VideosInfo),
+                               (r"/myvideos/info", MyVideosInfo),
                                (r"/videos/(\d+)/comments", Comments),
                                (r"/videos/(\d+)/flag", ReportVideo),
                                (r"/comments/(\d+)/flag", ReportComment),
+							   (r"/comments/(\d+)/rating", RateComment),
                                (r"/videos/(\d+)/rating", VideoRating),
                                (r"/users/(\d+)/verify", Verify)], debug=True)

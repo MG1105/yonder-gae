@@ -18,7 +18,7 @@ class YonderDb(object):
 		query = "insert into videos values ('%s', '%s', '%s', '%s', %d, %d)" % (video_id, user_id, ts, caption, rating, flag)
 		self.cur.execute(query)
 		logging.debug("Executing %s" % query)
-		query = "insert into location values ('%s', point(%s,%s))" % (video_id, longitude, latitude)
+		query = "insert into location values ('%s', point(%s,%s), 1)" % (video_id, longitude, latitude)
 		self.cur.execute(query)
 		logging.debug("Executing %s" % query)
 		self.conn.commit()
@@ -27,11 +27,29 @@ class YonderDb(object):
 
 	def get_videos(self, user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2):
 		query = """select L.video_id from yonderdb.location L left join (select * from yonderdb.seen where user_id = "%s" ) AS S on L.video_id = S.video_id
-		where S.user_id is NULL and st_within(location, envelope(linestring(point(%s, %s), point(%s, %s))))	order by st_distance(point(%s, %s), location) limit  10;""" # limit 5 to 10 randomly
+		where S.user_id is NULL and L.visible > 0 and st_within(location, envelope(linestring(point(%s, %s), point(%s, %s))))	order by st_distance(point(%s, %s), location) limit  10;""" # limit 5 to 10 randomly
 		self.connect()
 		self.cur.execute(query % (user_id, rlon1, rlat1, rlon2, rlat2, longitude, latitude))
 		logging.debug("Executing " + query % (user_id, rlon1, rlat1, rlon2, rlat2, longitude, latitude))
 		ids = [row[0] for row in self.cur.fetchall()]
+		self.cur.close()
+		self.conn.close()
+		logging.info("Videos found: " + str(ids))
+		return ids
+
+	def get_my_videos(self, user_id, uploaded, commented):
+		self.connect()
+		if uploaded:
+			query = "select V.video_id from videos V join location L on V.video_id = L.video_id where V.user_id = '%s' and L.visible = 1;" % user_id
+			self.cur.execute(query)
+			logging.debug("Executing " + query)
+			ids = [row[0] for row in self.cur.fetchall()]
+		if commented:
+			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where C.user_id = '%s' and L.visible = 1; " % user_id
+			self.cur.execute(query)
+			logging.debug("Executing " + query)
+			ids += [row[0] for row in self.cur.fetchall()]
+		ids = list(set(ids))
 		self.cur.close()
 		self.conn.close()
 		logging.info("Videos found: " + str(ids))
@@ -74,10 +92,11 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def add_comment(self, comment, video_id, user_id):
+	def add_comment(self, comment_id, comment, video_id, user_id):
 		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into comments values (NULL, '%s', '%s', '%s', 0, 1, '%s')" % (comment, video_id, user_id, ts)
+		comment = comment.replace("'", "\\'")
+		query = "insert into comments values ('%s', '%s', '%s', '%s', 0, 0, 1, '%s')" % (comment_id, comment, video_id, user_id, ts)
 		logging.debug("Execute: " + query)
 		self.cur.execute(query)
 		self.conn.commit()
@@ -86,12 +105,12 @@ class YonderDb(object):
 
 	def get_comments(self, video_id):
 		comment_list = []
-		query = "select comment_id, comment from comments where video_id = '%s' and visible = 1" % video_id
+		query = "select comment_id, comment, rating from comments where video_id = '%s' and visible = 1 order by ts" % video_id
 		self.connect()
 		self.cur.execute(query)
 		logging.debug("Executing " + query)
 		for row in self.cur.fetchall():
-			comment = {"id": row[0], "content": row[1]}
+			comment = {"id": row[0], "content": row[1], "rating":row[2]}
 			comment_list.append(comment)
 		self.cur.close()
 		self.conn.close()
@@ -109,6 +128,15 @@ class YonderDb(object):
 	def flag_comment(self, comment_id):
 		self.connect()
 		query = "update comments set flag=flag+1 where comment_id = '%s'" % comment_id
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def rate_comment(self,comment_id, rating):
+		self.connect()
+		query = "update comments set rating=rating+(%s) where comment_id = '%s'" % (rating,comment_id)
 		logging.debug("Execute: " + query)
 		self.cur.execute(query)
 		self.conn.commit()
