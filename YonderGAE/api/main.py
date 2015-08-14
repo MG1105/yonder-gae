@@ -73,10 +73,11 @@ class Comments(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			user_id = self.request.POST["user"]
+			nickname = self.request.POST["nickname"]
 			text = self.request.POST["comment"]
 			comment_id = self.request.POST["id"]
 			comment = Comment()
-			comment.add_comment(comment_id, text, video_id, user_id)
+			comment.add_comment(nickname, comment_id, text, video_id, user_id)
 		except Exception:
 			logging.exception("Failed to add a comment")
 			out = {"success": 0}
@@ -105,8 +106,9 @@ class ReportVideo(webapp2.RequestHandler):
 	def post(self, video_id):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
+			user_id = self.request.get("user")
 			report = Video()
-			report.add_flag(video_id)
+			report.add_flag(video_id, user_id)
 		except Exception:
 			logging.exception("Failed to report video %s" % video_id)
 			out = {"success": 0}
@@ -121,8 +123,9 @@ class ReportComment(webapp2.RequestHandler):
 	def post(self, comment_id):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
+			user_id = self.request.get("user")
 			comment = Comment()
-			comment.add_flag(comment_id)
+			comment.add_flag(comment_id, user_id)
 		except Exception:
 			logging.exception("Failed to report comment %s" % comment_id)
 			out = {"success": 0}
@@ -172,6 +175,7 @@ class Verify(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			user = User()
+			version = self.request.get("version")
 			user_info = user.verify(user_id)
 		except Exception:
 			logging.exception("Failed verifying user %s" % user_id)
@@ -210,4 +214,4 @@ app = webapp2.WSGIApplication([(r"/videos", Videos),
                                (r"/comments/(\d+)/flag", ReportComment),
 							   (r"/comments/(\d+)/rating", RateComment),
                                (r"/videos/(\d+)/rating", VideoRating),
-                               (r"/users/(\d+)/verify", Verify)], debug=True)
+                               (r"/users/(\w+)/verify", Verify)], debug=True)
