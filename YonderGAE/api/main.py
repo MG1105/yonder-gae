@@ -106,7 +106,7 @@ class ReportVideo(webapp2.RequestHandler):
 	def post(self, video_id):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
-			user_id = self.request.get("user")
+			user_id = self.request.POST["user"]
 			report = Video()
 			report.add_flag(video_id, user_id)
 		except Exception:
@@ -123,7 +123,7 @@ class ReportComment(webapp2.RequestHandler):
 	def post(self, comment_id):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
-			user_id = self.request.get("user")
+			user_id = self.request.POST["user"]
 			comment = Comment()
 			comment.add_flag(comment_id, user_id)
 		except Exception:

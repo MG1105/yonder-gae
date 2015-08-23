@@ -52,7 +52,7 @@ class YonderDb(object):
 			logging.debug("Executing " + query)
 			ids = [row[0] for row in self.cur.fetchall()]
 		if commented:
-			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where C.user_id = '%s' and L.visible = 1 and C.visible = 1; " % user_id
+			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where C.user_id = '%s' and L.visible = 1 and C.visible = 1 order by C.ts; " % user_id
 			self.cur.execute(query)
 			logging.debug("Executing " + query)
 			ids += [row[0] for row in self.cur.fetchall()]
