@@ -6,6 +6,7 @@ from videos import Feed
 from comments import Comment
 from videos import Video
 from util import User
+from cron import Cron
 
 class Videos(webapp2.RequestHandler):
 
@@ -204,9 +205,15 @@ class MyVideosInfo(webapp2.RequestHandler):
 			out = {"success": 1, "videos": videos_info}
 			self.response.write(json.dumps(out))
 
+class CronJob(webapp2.RequestHandler):
+
+	def get(self):
+		cron = Cron()
+		cron.cleanup()
 
 # Every request associated to user id
-app = webapp2.WSGIApplication([(r"/videos", Videos),
+app = webapp2.WSGIApplication([(r"/cron", CronJob),
+							   (r"/videos", Videos),
                                (r"/videos/info", VideosInfo),
                                (r"/myvideos/info", MyVideosInfo),
                                (r"/videos/(\d+)/comments", Comments),

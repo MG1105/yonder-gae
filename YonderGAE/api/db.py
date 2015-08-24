@@ -1,5 +1,6 @@
 import MySQLdb
 from datetime import datetime
+from datetime import timedelta
 import logging
 
 adminkey = "897d1e5hb8u47u56jh6"
@@ -190,7 +191,41 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
+	def cleanup(self):
+		self.connect()
+		one_day = datetime.now() - timedelta(hours = 24)
+		ts = one_day.strftime("%Y-%m-%d %H:%M:%S")
+		query = "select video_id from videos where ts < '%s'" % ts
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		ids = []
+		for row in self.cur.fetchall():
+			ids.append(row[0])
+		query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where V.ts < '%s';" % ts
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		query = "Delete L FROM videos V join location L on V.video_id = L.video_id where V.ts < '%s';" % ts
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		query = "Delete S FROM videos V join seen S on V.video_id = S.video_id where V.ts < '%s';" % ts
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		query = "Delete from videos where ts < '%s';" % ts
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+		return ids
 
+	def flag_check(self):
+		self.connect()
+		query = "update comments set visible=-1 where flag > 3"
+		logging.debug("Execute: " + query)
+		self.cur.execute(query)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
 
 # Test caption and comments with quotes
 # Cron job to delete videos > 24H every hour
