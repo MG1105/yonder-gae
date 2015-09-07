@@ -177,7 +177,7 @@ class Verify(webapp2.RequestHandler):
 		try:
 			user = User()
 			version = self.request.get("version")
-			user_info = user.verify(user_id)
+			user_info = user.verify(user_id, version)
 		except Exception:
 			logging.exception("Failed verifying user %s" % user_id)
 			out = {"success": 0}
@@ -196,13 +196,15 @@ class MyVideosInfo(webapp2.RequestHandler):
 			feed = Feed()
 			ids = feed.get_my_videos(user_id, True, False)
 			videos_info = feed.get_videos_info(ids)
+			user = User()
+			score = user.get_score(user_id)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}
 			self.response.write(json.dumps(out))
 		else:
 			logging.info("Video Ids retrieved successfully")
-			out = {"success": 1, "videos": videos_info}
+			out = {"success": 1, "videos": videos_info, "score": score}
 			self.response.write(json.dumps(out))
 
 class CronJob(webapp2.RequestHandler):

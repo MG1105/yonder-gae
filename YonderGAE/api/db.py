@@ -26,6 +26,7 @@ class YonderDb(object):
 		query = "insert into location values ('%s', point(%s,%s), 1)" % (video_id, longitude, latitude)
 		self.cur.execute(query)
 		logging.debug("Executing %s" % query)
+		self.update_score(video_id, True, "10")
 		self.conn.commit()
 		self.cur.close()
 		self.conn.close()
@@ -87,7 +88,7 @@ class YonderDb(object):
 	def update_last_request(self, user_id):
 		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into users values ('%s', '%s', NULL, NULL) on duplicate key update last_request = values(last_request)" % (user_id, ts)
+		query = "insert into users values ('%s', '%s', NULL, NULL, 0) on duplicate key update last_request = values(last_request)" % (user_id, ts)
 		self.cur.execute(query)
 		self.conn.commit()
 		self.cur.close()
@@ -151,6 +152,7 @@ class YonderDb(object):
 
 	def rate_comment(self,comment_id, rating):
 		self.connect()
+		self.update_score(comment_id, False,rating)
 		query = "update comments set rating=rating+(%s) where comment_id = '%s'" % (rating,comment_id)
 		logging.debug("Execute: " + query)
 		self.cur.execute(query)
@@ -160,6 +162,7 @@ class YonderDb(object):
 
 	def rate_video(self,video_id, rating):
 		self.connect()
+		self.update_score(video_id, True, rating)
 		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
 		logging.debug("Execute: " + query)
 		self.cur.execute(query)
@@ -167,19 +170,16 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def get_user_info(self, user_id):
+	def get_user_info(self, user_id, upgrade):
 		query = "select warn, ban from users where user_id = '%s'" % user_id
 		self.connect()
 		self.cur.execute(query)
 		logging.debug("Executing " + query)
 		row = self.cur.fetchone()
 		if row is not None:
-			info = {"warn": row[0], "ban": row[1], "upgrade": 0}
+			info = {"warn": row[0], "ban": row[1], "upgrade": upgrade}
 		else:
-			query = "insert into users values ('%s', NULL, NULL, NULL)" % user_id
-			self.cur.execute(query)
-			self.conn.commit()
-			info = {"warn": None, "ban": None, "upgrade": 0}
+			logging.error("Cannot find user info")
 		return info
 
 	def user_warned(self, user_id):
@@ -227,5 +227,32 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-# Test caption and comments with quotes
-# Cron job to delete videos > 24H every hour
+	def update_score(self, id, video, points):
+		if video:
+			user_id_query = "select user_id from videos where video_id = '%s'" % (id)
+		else:
+			user_id_query = "select user_id from comments where comment_id = '%s'" % (id)
+
+		logging.debug("Execute: " + user_id_query)
+		self.cur.execute(user_id_query)
+		row = self.cur.fetchone()
+		if row is not None:
+			user_id = row[0]
+			query = "update users set score=score+(%s) where user_id = '%s'" % (points,user_id)
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+		else:
+			logging.error("Cannot update user score")
+
+	def get_score(self, user_id):
+		query = "select score from users where user_id = '%s'" % user_id
+		self.connect()
+		self.cur.execute(query)
+		logging.debug("Executing " + query)
+		row = self.cur.fetchone()
+		score = 0
+		if row is not None:
+			score = row[0]
+		else:
+			logging.error("Cannot find user score")
+		return score

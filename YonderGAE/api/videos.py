@@ -43,7 +43,6 @@ class Feed(object):
 		yonderdb = YonderDb()
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
 		yonderdb.add_seen(user_id, video_ids)
-		yonderdb.update_last_request(user_id) # Keep it client side?
 		return video_ids
 
 	def get_my_videos(self, user_id, uploaded, commented):
