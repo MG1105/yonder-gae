@@ -12,8 +12,10 @@ class Cron (object):
 
     def cleanup(self):
         yonderdb = YonderDb()
-        ids = yonderdb.cleanup()
+        ids = yonderdb.cleanup(False)
+        ids += yonderdb.cleanup(True)
         yonderdb.flag_check()
+        yonderdb.fake_rating()
         for id in ids:
             file_name = "/yander/" + id + ".mp4"
             logging.info("Deleting %s" % id)

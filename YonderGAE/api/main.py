@@ -39,8 +39,11 @@ class Videos(webapp2.RequestHandler):
 			feed = Feed()
 			if search_type == "near":
 				video_ids = feed.get_videos(user_id, longitude, latitude)
-			else:
+			elif search_type == "mine":
 				video_ids = feed.get_my_videos(user_id, True, True)
+			elif search_type == "count":
+				video_ids = feed.get_videos(user_id, longitude, latitude, True)
+				video_ids = len(video_ids)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}

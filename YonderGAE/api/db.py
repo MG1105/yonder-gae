@@ -97,12 +97,28 @@ class YonderDb(object):
 
 	def add_seen(self, user_id, video_ids):
 		self.connect()
+		if user_id == adminkey:
+			return
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		for id in video_ids:
-			query = "insert into seen values ('%s','%s')" % (user_id, id)
+			query = "insert into seen values ('%s','%s', '%s')" % (user_id, id, ts)
 			self.cur.execute(query)
 		self.conn.commit()
 		self.cur.close()
 		self.conn.close()
+
+	def recently_seen(self, user_id):
+		self.connect()
+		if user_id == adminkey:
+			return 0
+		past = datetime.utcnow() - timedelta(hours = 3)
+		ts = past.strftime("%Y-%m-%d %H:%M:%S")
+		query = "select video_id from seen where user_id = '%s' and ts > '%s'" % (user_id, ts)
+		self.cur.execute(query)
+		recent = self.cur.rowcount
+		self.cur.close()
+		self.conn.close()
+		return recent
 
 	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
 		self.connect()
@@ -191,28 +207,40 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def cleanup(self):
+	def cleanup(self, admin = False):
 		self.connect()
-		one_day = datetime.now() - timedelta(hours = 24)
-		ts = one_day.strftime("%Y-%m-%d %H:%M:%S")
-		query = "select video_id from videos where ts < '%s'" % ts
+		if admin:
+			oldest = datetime.utcnow() - timedelta(hours = 2400)
+			ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
+			admin_condition = " and V.user_id = '%s'" % adminkey
+		else:
+			oldest = datetime.utcnow() - timedelta(hours = 24)
+			ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
+			admin_condition = " and V.user_id != '%s'" % adminkey
+		query = "select video_id from videos V where V.ts < '%s'" % ts + admin_condition
 		logging.debug("Execute: " + query)
 		self.cur.execute(query)
 		ids = []
 		for row in self.cur.fetchall():
 			ids.append(row[0])
-		query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where V.ts < '%s';" % ts
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		query = "Delete L FROM videos V join location L on V.video_id = L.video_id where V.ts < '%s';" % ts
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		query = "Delete S FROM videos V join seen S on V.video_id = S.video_id where V.ts < '%s';" % ts
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		query = "Delete from videos where ts < '%s';" % ts
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
+		# Delete comments on admin videos, tmp solution
+		if not admin:
+			query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where C.ts < '%s' and C.user_id != '%s' and V.user_id = '%s'" % (ts, adminkey, adminkey)
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+		if len(ids) > 0:
+			query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where V.ts < '%s'" % ts + admin_condition
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+			query = "Delete L FROM videos V join location L on V.video_id = L.video_id where V.ts < '%s'" % ts + admin_condition
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+			query = "Delete S FROM videos V join seen S on V.video_id = S.video_id where V.ts < '%s'" % ts + admin_condition
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+			query = "Delete V from videos V where V.ts < '%s'" % ts + admin_condition
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
 		self.conn.commit()
 		self.cur.close()
 		self.conn.close()
@@ -227,7 +255,23 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def update_score(self, id, video, points):
+	def fake_rating(self):
+		self.connect()
+		query = "select video_id from videos where rating < 2"
+		self.cur.execute(query)
+		logging.debug("Executing " + query)
+		from random import randint
+		for row in self.cur.fetchall():
+			points = randint(2,15)
+			query = "update videos set rating = rating +(%s) where video_id = '%s'" % (points, row[0])
+			logging.debug("Execute: " + query)
+			self.cur.execute(query)
+			self.update_score(row[0], True, points)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def update_score(self, id, video, points): # no local commit
 		if video:
 			user_id_query = "select user_id from videos where video_id = '%s'" % (id)
 		else:

@@ -31,18 +31,24 @@ class Upload(object):
 
 class Feed(object):
 
-	def get_videos(self, user_id, longitude, latitude):
-		radius = float(2);
+	def get_videos(self, user_id, longitude, latitude, count = False):
+		radius = float(5);
 		longitude = float(longitude)
 		latitude = float(latitude)
 		rlon1 = longitude - (radius / abs(math.cos(math.radians(latitude)) * 69))
 		rlon2 = longitude + (radius / abs(math.cos(math.radians(latitude)) * 69))
 		rlat1 = latitude - (radius / 69)
 		rlat2 = latitude + (radius / 69)
-		limit = randint(4,8)
+		limit = randint(2,5)
+		video_ids = []
 		yonderdb = YonderDb()
+		seen_count = yonderdb.recently_seen(user_id)
+		logging.info("Recently seen count %s" % seen_count)
+		if seen_count > 8:
+			return video_ids
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
-		yonderdb.add_seen(user_id, video_ids)
+		if not count:
+			yonderdb.add_seen(user_id, video_ids)
 		return video_ids
 
 	def get_my_videos(self, user_id, uploaded, commented):
