@@ -27,26 +27,44 @@ class Upload(object):
 		gcs_file.close()
 		yonderdb = YonderDb()
 		yonderdb.add_video(video.filename[:-4], caption, user_id, longitude, latitude)
+		from util import User
+		if user_id != "897d1e5hb8u47u56jh6":
+			email_body = "Caption '%s' User %s" % (caption, user_id)
+			User.email("New Video", email_body)
 
 
 class Feed(object):
 
 	def get_videos(self, user_id, longitude, latitude, count = False):
-		radius = float(5);
+		radius = float(5000)
 		longitude = float(longitude)
 		latitude = float(latitude)
 		rlon1 = longitude - (radius / abs(math.cos(math.radians(latitude)) * 69))
 		rlon2 = longitude + (radius / abs(math.cos(math.radians(latitude)) * 69))
 		rlat1 = latitude - (radius / 69)
 		rlat2 = latitude + (radius / 69)
-		limit = randint(2,5)
+		limit = randint(3,5)
 		video_ids = []
+
 		yonderdb = YonderDb()
-		seen_count = yonderdb.recently_seen(user_id)
-		logging.info("Recently seen count %s" % seen_count)
-		if seen_count > 8:
+		seen_count = yonderdb.recently_seen(user_id, 3)
+		logging.info("Seen count past 3 hours %s" % seen_count)
+		if seen_count >= 8:
 			return video_ids
+		seen_count = yonderdb.recently_seen(user_id, 24)
+		logging.info("Seen count past 24 hours %s" % seen_count)
+		if seen_count == 0:
+			limit = randint(5,7)
+		seen_count = yonderdb.recently_seen(user_id, 70)
+		logging.info("Seen count past 70 hours %s" % seen_count)
+		if seen_count == 0:
+			limit = randint(7,9)
+
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
+		if len(video_ids) == 0 and not count:
+			from util import User
+			email_body = "User %s" % (user_id)
+			User.email("No content", email_body)
 		if not count:
 			yonderdb.add_seen(user_id, video_ids)
 		return video_ids
@@ -69,6 +87,6 @@ class Video(object):
 		yonderdb = YonderDb()
 		yonderdb.flag_video(video_id, user_id)
 
-	def add_rating(self, video_id, rating):
+	def add_rating(self, video_id, rating, user_id):
 		yonderdb = YonderDb()
-		yonderdb.rate_video(video_id, int(rating))
+		yonderdb.rate_video(video_id, int(rating), user_id)

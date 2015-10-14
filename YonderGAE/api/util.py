@@ -34,3 +34,14 @@ class User(object):
 	def get_score(self, user_id):
 		yonderdb = YonderDb()
 		return yonderdb.get_score(user_id)
+
+	def ping(self, user_id):
+		yonderdb = YonderDb()
+		yonderdb.update_last_ping(user_id)
+
+	@staticmethod
+	def email(subject, body):
+		from google.appengine.api import mail
+		sender_address = "yondervideos@gmail.com"
+		user_address = "support@yonderfeed.com"
+		mail.send_mail(sender_address, user_address, subject, body)

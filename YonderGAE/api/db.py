@@ -32,14 +32,18 @@ class YonderDb(object):
 		self.conn.close()
 
 	def get_videos(self, user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit):
-		query = """select L.video_id from yonderdb.location L left join (select * from yonderdb.seen where user_id = "%s" ) AS S on L.video_id = S.video_id
-		where S.user_id is NULL and L.visible = 1 and st_within(location, envelope(linestring(point(%s, %s), point(%s, %s))))	order by st_distance(point(%s, %s), location) limit  %s;"""
-		query = query % (user_id, rlon1, rlat1, rlon2, rlat2, longitude, latitude, limit)
+		query = "select L.video_id from yonderdb.location L " \
+				"left join (select * from yonderdb.seen where user_id = '%s' ) AS S on L.video_id = S.video_id " \
+				"left join yonderdb.videos as V on L.video_id = V.video_id " \
+				"where S.user_id is NULL and L.visible = 1 and V.rating > -2 and st_within(location, envelope(linestring(point(%s, %s), point(%s, %s)))) " \
+				"order by V.ts DESC limit %s;"
+		# order by distance: order by st_distance(point(%s, %s), location)
+		query = query % (user_id, rlon1, rlat1, rlon2, rlat2, limit)
 		if user_id == adminkey:
-			query = """select V.video_id from videos V join location L on V.video_id = L.video_id where L.visible = 1 order by V.ts DESC;"""
+			query = """select V.video_id from videos V join location L on V.video_id = L.video_id where L.visible = 1 order by V.ts DESC limit 100;"""
+		logging.debug("Executing " + query) # log first
 		self.connect()
 		self.cur.execute(query)
-		logging.debug("Executing " + query) # log first
 		ids = [row[0] for row in self.cur.fetchall()]
 		self.cur.close()
 		self.conn.close()
@@ -54,7 +58,9 @@ class YonderDb(object):
 			logging.debug("Executing " + query)
 			ids = [row[0] for row in self.cur.fetchall()]
 		if commented:
-			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where C.user_id = '%s' and L.visible = 1 and C.visible = 1 order by C.ts; " % user_id
+			ts = datetime.utcnow() - timedelta(hours = 24)
+			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where " \
+					"C.user_id = '%s' and L.visible = 1 and C.visible = 1 and C.ts > '%s' order by C.ts; " % (user_id, ts)
 			self.cur.execute(query)
 			logging.debug("Executing " + query)
 			ids += [row[0] for row in self.cur.fetchall()]
@@ -88,7 +94,20 @@ class YonderDb(object):
 	def update_last_request(self, user_id):
 		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into users values ('%s', '%s', NULL, NULL, 0) on duplicate key update last_request = values(last_request)" % (user_id, ts)
+		query = "insert into users values ('%s', NULL, '%s', NULL, NULL, 0) on duplicate key update last_request = values(last_request)" % (user_id, ts)
+		self.cur.execute(query)
+		if self.cur.rowcount == 1:
+			from util import User
+			email_body = "User %s" % (user_id)
+			User.email("New User", email_body)
+		self.conn.commit()
+		self.cur.close()
+		self.conn.close()
+
+	def update_last_ping(self, user_id):
+		self.connect()
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+		query = "insert into users values ('%s', '%s', NULL, NULL, NULL, 0) on duplicate key update last_ping = values(last_ping)" % (user_id, ts)
 		self.cur.execute(query)
 		self.conn.commit()
 		self.cur.close()
@@ -107,11 +126,11 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def recently_seen(self, user_id):
+	def recently_seen(self, user_id, hours):
 		self.connect()
 		if user_id == adminkey:
 			return 0
-		past = datetime.utcnow() - timedelta(hours = 3)
+		past = datetime.utcnow() - timedelta(hours = hours)
 		ts = past.strftime("%Y-%m-%d %H:%M:%S")
 		query = "select video_id from seen where user_id = '%s' and ts > '%s'" % (user_id, ts)
 		self.cur.execute(query)
@@ -176,8 +195,13 @@ class YonderDb(object):
 		self.cur.close()
 		self.conn.close()
 
-	def rate_video(self,video_id, rating):
+	def rate_video(self,video_id, rating, user_id):
 		self.connect()
+		if user_id == adminkey:
+			if rating == 1:
+				rating = 3
+			elif rating == -1:
+				rating = -3
 		self.update_score(video_id, True, rating)
 		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
 		logging.debug("Execute: " + query)
@@ -210,7 +234,7 @@ class YonderDb(object):
 	def cleanup(self, admin = False):
 		self.connect()
 		if admin:
-			oldest = datetime.utcnow() - timedelta(hours = 2400)
+			oldest = datetime.utcnow() - timedelta(hours = 9000)
 			ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
 			admin_condition = " and V.user_id = '%s'" % adminkey
 		else:
@@ -223,11 +247,6 @@ class YonderDb(object):
 		ids = []
 		for row in self.cur.fetchall():
 			ids.append(row[0])
-		# Delete comments on admin videos, tmp solution
-		if not admin:
-			query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where C.ts < '%s' and C.user_id != '%s' and V.user_id = '%s'" % (ts, adminkey, adminkey)
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
 		if len(ids) > 0:
 			query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where V.ts < '%s'" % ts + admin_condition
 			logging.debug("Execute: " + query)
@@ -257,12 +276,12 @@ class YonderDb(object):
 
 	def fake_rating(self):
 		self.connect()
-		query = "select video_id from videos where rating < 2"
+		query = "select video_id from videos where rating < 10 and user_id = '%s'" % adminkey
 		self.cur.execute(query)
 		logging.debug("Executing " + query)
 		from random import randint
 		for row in self.cur.fetchall():
-			points = randint(2,15)
+			points = randint(10,30)
 			query = "update videos set rating = rating +(%s) where video_id = '%s'" % (points, row[0])
 			logging.debug("Execute: " + query)
 			self.cur.execute(query)

@@ -162,8 +162,9 @@ class VideoRating(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			rating = self.request.POST["rating"]
+			user_id = self.request.POST["user"]
 			video = Video()
-			video.add_rating(video_id, rating)
+			video.add_rating(video_id, rating, user_id)
 		except Exception:
 			logging.exception("Failed to add video rating")
 			out = {"success": 0}
@@ -188,6 +189,23 @@ class Verify(webapp2.RequestHandler):
 		else:
 			logging.info("User info retrieved successfully")
 			out = {"success": 1, "user": user_info}
+			self.response.write(json.dumps(out))
+
+class Ping(webapp2.RequestHandler):
+
+	def get(self, user_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user = User()
+			version = self.request.get("version")
+			user.ping(user_id)
+		except Exception:
+			logging.exception("Failed ping user %s" % user_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("User pinged successfully")
+			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
 class MyVideosInfo(webapp2.RequestHandler):
@@ -226,4 +244,5 @@ app = webapp2.WSGIApplication([(r"/cron", CronJob),
                                (r"/comments/(\d+)/flag", ReportComment),
 							   (r"/comments/(\d+)/rating", RateComment),
                                (r"/videos/(\d+)/rating", VideoRating),
+                               (r"/users/(\w+)/ping", Ping),
                                (r"/users/(\w+)/verify", Verify)], debug=True)
