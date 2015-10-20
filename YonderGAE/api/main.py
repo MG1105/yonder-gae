@@ -145,8 +145,9 @@ class RateComment(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			rating = self.request.POST["rating"]
+			user_id = self.request.POST["user"]
 			comment = Comment()
-			comment.rate_comment(comment_id, rating)
+			comment.rate_comment(comment_id, rating, user_id)
 		except Exception:
 			logging.exception("Failed to rate comment %s" % comment_id)
 			out = {"success": 0}

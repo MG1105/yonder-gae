@@ -20,4 +20,4 @@ class Cron (object):
             file_name = "/yander/" + id + ".mp4"
             logging.info("Deleting %s" % id)
             write_retry_params = gcs.RetryParams(backoff_factor=1.1)
-            gcs.delete(file_name, retry_params=write_retry_params)
+            gcs.delete(file_name, retry_params=write_retry_params) # when removing invisible admin videos, 14 first videos wont be there

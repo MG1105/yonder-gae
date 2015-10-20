@@ -51,14 +51,25 @@ class Feed(object):
 		logging.info("Seen count past 3 hours %s" % seen_count)
 		if seen_count >= 8:
 			return video_ids
+
+		if seen_count == 0:
+			limit = 6
+		seen_count = yonderdb.recently_seen(user_id, 6)
+		logging.info("Seen count past 6 hours %s" % seen_count)
+		if seen_count == 0:
+			limit = 8
+		seen_count = yonderdb.recently_seen(user_id, 12)
+		logging.info("Seen count past 12 hours %s" % seen_count)
+		if seen_count == 0:
+			limit = 12
 		seen_count = yonderdb.recently_seen(user_id, 24)
 		logging.info("Seen count past 24 hours %s" % seen_count)
 		if seen_count == 0:
-			limit = randint(5,7)
+			limit = 15
 		seen_count = yonderdb.recently_seen(user_id, 70)
 		logging.info("Seen count past 70 hours %s" % seen_count)
 		if seen_count == 0:
-			limit = randint(7,9)
+			limit = 20
 
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
 		if len(video_ids) == 0 and not count:
