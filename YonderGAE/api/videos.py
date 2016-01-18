@@ -43,42 +43,47 @@ class Feed(object):
 		rlon2 = longitude + (radius / abs(math.cos(math.radians(latitude)) * 69))
 		rlat1 = latitude - (radius / 69)
 		rlat2 = latitude + (radius / 69)
-		limit = randint(3,5)
+		limit = 0
 		video_ids = []
 
 		yonderdb = YonderDb()
-		seen_count = yonderdb.recently_seen(user_id, 3)
-		logging.info("Seen count past 3 hours %s" % seen_count)
-		if seen_count >= 8:
-			return video_ids
-
-		if seen_count == 0:
-			limit = 6
-		seen_count = yonderdb.recently_seen(user_id, 6)
-		logging.info("Seen count past 6 hours %s" % seen_count)
-		if seen_count == 0:
-			limit = 8
-		seen_count = yonderdb.recently_seen(user_id, 12)
-		logging.info("Seen count past 12 hours %s" % seen_count)
-		if seen_count == 0:
-			limit = 12
-		seen_count = yonderdb.recently_seen(user_id, 24)
-		logging.info("Seen count past 24 hours %s" % seen_count)
-		if seen_count == 0:
-			limit = 15
 		seen_count = yonderdb.recently_seen(user_id, 70)
 		logging.info("Seen count past 70 hours %s" % seen_count)
-		if seen_count == 0:
-			limit = 20
+		if seen_count <= 20:
+			limit = randint(7,9)
+		else:
+			seen_count = yonderdb.recently_seen(user_id, 24)
+			logging.info("Seen count past 24 hours %s" % seen_count)
+			if seen_count <= 15:
+				limit = randint(5,7)
+			else:
+				seen_count = yonderdb.recently_seen(user_id, 12)
+				logging.info("Seen count past 12 hours %s" % seen_count)
+				if seen_count <= 12:
+					limit = randint(5,7)
+				else:
+					seen_count = yonderdb.recently_seen(user_id, 6)
+					logging.info("Seen count past 6 hours %s" % seen_count)
+					if seen_count <= 10:
+						limit = randint(3,5)
+					else:
+						seen_count = yonderdb.recently_seen(user_id, 3)
+						logging.info("Seen count past 3 hours %s" % seen_count)
+						if seen_count <= 8:
+							limit = randint(3,5)
 
 		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
-		if len(video_ids) == 0 and not count:
+		videos_info = []
+		if len(video_ids) > 0:
+			videos_info = yonderdb.get_video_info(video_ids)
+
+		if len(video_ids) == 0 and not count and limit != 0:
 			from util import User
 			email_body = "User %s" % (user_id)
-			User.email("No content", email_body)
+			#User.email("No content", email_body)
 		if not count:
 			yonderdb.add_seen(user_id, video_ids)
-		return video_ids
+		return videos_info
 
 	def get_my_videos(self, user_id, uploaded, commented):
 		yonderdb = YonderDb()

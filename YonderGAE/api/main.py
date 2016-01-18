@@ -3,6 +3,8 @@ import webapp2
 import json
 from videos import Upload
 from videos import Feed
+from channels import Channels
+from notifications import Notifications
 from comments import Comment
 from videos import Video
 from util import User
@@ -229,6 +231,43 @@ class MyVideosInfo(webapp2.RequestHandler):
 			out = {"success": 1, "videos": videos_info, "score": score}
 			self.response.write(json.dumps(out))
 
+class Channel(webapp2.RequestHandler):
+
+	def get(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.GET["user"]
+			sort = self.request.GET["sort"]
+			channels = Channels()
+			channels_list = channels.get_channels(user_id, sort)
+		except Exception:
+			logging.exception("Failed looking for channels")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Channels retrieved successfully")
+			out = {"success": 1, "channels": channels_list}
+			self.response.write(json.dumps(out))
+
+
+class Notification(webapp2.RequestHandler):
+
+	def get(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.GET["user"]
+			seen = self.request.GET["seen"]
+			notifications = Notifications()
+			notifications_list = notifications.get_notifications(user_id, seen)
+		except Exception:
+			logging.exception("Failed looking for notifications")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Notifications retrieved successfully")
+			out = {"success": 1, "notifications": notifications_list}
+			self.response.write(json.dumps(out))
+
 class CronJob(webapp2.RequestHandler):
 
 	def get(self):
@@ -238,6 +277,8 @@ class CronJob(webapp2.RequestHandler):
 # Every request associated to user id
 app = webapp2.WSGIApplication([(r"/cron", CronJob),
 							   (r"/videos", Videos),
+							   (r"/channels", Channel),
+							   (r"/notifications", Notification),
                                (r"/videos/info", VideosInfo),
                                (r"/myvideos/info", MyVideosInfo),
                                (r"/videos/(\d+)/comments", Comments),

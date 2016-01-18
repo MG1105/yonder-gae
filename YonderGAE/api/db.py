@@ -15,21 +15,21 @@ class YonderDb(object):
 		self.cur = self.conn.cursor()
 		self.cur.execute("SET NAMES 'utf8mb4'")
 
-	def add_video(self, video_id, caption, user_id, longitude, latitude):
+	def execute(self, query):
+		self.connect()
+		logging.debug("Executing %s" % query)
+		self.cur.execute(query)
+		self.conn.commit()
+
+	def add_video(self, video_id, caption, user_id, longitude, latitude, channel_id):
 		rating, flag = 0, 0
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		self.connect()
 		caption = caption.replace("'", "\\'")
-		query = "insert into videos values ('%s', '%s', '%s', '%s', %d, %d, 0)" % (video_id, user_id, ts, caption, rating, flag)
-		self.cur.execute(query)
-		logging.debug("Executing %s" % query)
+		query = "insert into videos values ('%s', '%s', '%s', '%s', %d, %d, 0, %s)" % (video_id, user_id, ts, caption, rating, flag, channel_id)
+		self.execute(query)
 		query = "insert into location values ('%s', point(%s,%s), 1)" % (video_id, longitude, latitude)
-		self.cur.execute(query)
-		logging.debug("Executing %s" % query)
+		self.execute(query)
 		#self.update_score(video_id, True, "10")
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
 
 	def get_videos(self, user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit):
 		query = "select L.video_id from yonderdb.location L " \
@@ -40,164 +40,117 @@ class YonderDb(object):
 		# order by distance: order by st_distance(point(%s, %s), location)
 		query = query % (user_id, rlon1, rlat1, rlon2, rlat2, limit)
 		if user_id == adminkey:
-			query = """select V.video_id from videos V join location L on V.video_id = L.video_id where L.visible = 1 order by V.ts DESC limit 100;"""
-		logging.debug("Executing " + query)
-		self.connect()
-		self.cur.execute(query)
+			query = """select V.video_id from videos V join location L on V.video_id = L.video_id where L.visible = 1 order by V.ts DESC limit 3;"""
+		self.execute(query)
 		ids = [row[0] for row in self.cur.fetchall()]
-		self.cur.close()
-		self.conn.close()
 		logging.info("Videos found: " + str(ids))
 		return ids
 
 	def get_my_videos(self, user_id, uploaded, commented):
-		self.connect()
 		if uploaded:
 			query = "select V.video_id from videos V join location L on V.video_id = L.video_id where V.user_id = '%s' and L.visible = 1 order by V.ts;" % user_id
-			self.cur.execute(query)
-			logging.debug("Executing " + query)
+			self.execute(query)
 			ids = [row[0] for row in self.cur.fetchall()]
 		if commented:
 			ts = datetime.utcnow() - timedelta(hours = 24)
 			query = "select distinct(C.video_id) from comments C join location L on C.video_id = L.video_id where " \
 					"C.user_id = '%s' and L.visible = 1 and C.visible = 1 and C.ts > '%s' order by C.ts; " % (user_id, ts)
-			self.cur.execute(query)
-			logging.debug("Executing " + query)
+			self.execute(query)
 			ids += [row[0] for row in self.cur.fetchall()]
 		unique_ids = []
 		for id in ids:
 			if id not in unique_ids:
 				unique_ids.append(id)
-		self.cur.close()
-		self.conn.close()
 		logging.info("Videos found: " + str(unique_ids))
 		return unique_ids
 
 	def get_video_info(self, video_ids):
 		info = []
-		self.connect()
 		query = "select caption, rating, boost from videos where video_id = '%s'"
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
 		for id in video_ids:
-			self.cur.execute(query % id)
+			self.execute(query % id)
 			row = self.cur.fetchone()
 			if row[2] is None:
 				boost = 0
 			else:
 				boost = row[2]
 			stats = {"id": id, "caption": row[0], "rating": row[1] + boost}
-			self.cur.execute(comments_total_query % id)
+			self.execute(comments_total_query % id)
 			row = self.cur.fetchone()
 			stats["comments_total"] = row[0]
 			info.append(stats)
-		self.cur.close()
-		self.conn.close()
 		logging.debug(str(info))
 		return info
 
 	def update_last_request(self, user_id, version):
-		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		query = "insert into users values ('%s', NULL, '%s', NULL, NULL, 0, '%s', NULL) on duplicate key update last_request = values(last_request)" % (user_id, ts, ts)
-		self.cur.execute(query)
+		self.execute(query)
 		if self.cur.rowcount == 1:
 			from util import User
 			email_body = "User %s" % (user_id)
 			User.email("New User", email_body)
 		query = "update users set version=%s where user_id = '%s'" % (version, user_id)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def update_last_ping(self, user_id):
-		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		query = "insert into users values ('%s', '%s', NULL, NULL, NULL, 0, '%s', NULL) on duplicate key update last_ping = values(last_ping)" % (user_id, ts, ts)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 
 	def add_seen(self, user_id, video_ids):
-		self.connect()
 		if user_id == adminkey:
 			return
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		for id in video_ids:
 			query = "insert into seen values ('%s','%s', '%s')" % (user_id, id, ts)
-			self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+			self.execute(query)
 
 	def recently_seen(self, user_id, hours):
-		self.connect()
 		if user_id == adminkey:
 			return 0
 		past = datetime.utcnow() - timedelta(hours = hours)
 		ts = past.strftime("%Y-%m-%d %H:%M:%S")
 		query = "select video_id from seen where user_id = '%s' and ts > '%s'" % (user_id, ts)
-		self.cur.execute(query)
+		self.execute(query)
 		recent = self.cur.rowcount
-		self.cur.close()
-		self.conn.close()
 		return recent
 
 	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
-		self.connect()
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		comment = comment.replace("'", "\\'")
 		query = "insert into comments values ('%s', '%s', '%s', '%s', '%s', 0, 0, 1, '%s')" % (comment_id, comment, video_id, user_id, nickname, ts)
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
+		self.execute(query)
 		query = "select caption from videos where video_id = '%s'" % video_id
-		self.cur.execute(query)
+		self.execute(query)
 		row = self.cur.fetchone()
 		caption = row[0]
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
 		return caption
 
 	def get_comments(self, video_id):
 		comment_list = []
 		query = "select comment_id, comment, rating, nickname from comments where video_id = '%s' and visible = 1 order by ts" % video_id
-		self.connect()
-		self.cur.execute(query)
-		logging.debug("Executing " + query)
+		self.execute(query)
 		for row in self.cur.fetchall():
 			comment = {"id": row[0].decode(encoding='UTF-8',errors='strict'), "content": row[1], "rating":row[2], "nickname":row[3]}
 			comment_list.append(comment)
-		self.cur.close()
-		self.conn.close()
 		return comment_list
 
 	def flag_video(self, video_id, user_id):
-		self.connect()
 		query = "update videos set flag=flag+1 where video_id = '%s'" % video_id
 		if user_id == adminkey:
 			query = "update location set visible=0 where video_id = '%s'" % video_id
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def flag_comment(self, comment_id, user_id):
-		self.connect()
 		query = "update comments set flag=flag+1 where comment_id = '%s'" % comment_id
 		if user_id == adminkey:
 			query = "update comments set visible=0 where comment_id = '%s'" % comment_id
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def rate_comment(self,comment_id, rating, user_id):
-		self.connect()
 		if user_id == adminkey:
 			from random import randint
 			if rating == "1":
@@ -206,14 +159,9 @@ class YonderDb(object):
 				rating = -3
 		self.update_score(comment_id, False,rating)
 		query = "update comments set rating=rating+(%s) where comment_id = '%s'" % (rating,comment_id)
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def rate_video(self,video_id, rating, user_id):
-		self.connect()
 		if user_id == adminkey:
 			from random import randint
 			if rating == 1:
@@ -222,17 +170,11 @@ class YonderDb(object):
 				rating = -3
 		self.update_score(video_id, True, rating)
 		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def get_user_info(self, user_id, upgrade):
 		query = "select warn, ban from users where user_id = '%s'" % user_id
-		self.connect()
-		self.cur.execute(query)
-		logging.debug("Executing " + query)
+		self.execute(query)
 		row = self.cur.fetchone()
 		if row is not None:
 			info = {"warn": row[0], "ban": row[1], "upgrade": upgrade}
@@ -241,16 +183,10 @@ class YonderDb(object):
 		return info
 
 	def user_warned(self, user_id):
-		self.connect()
 		query = "update users set warn=0 where user_id = '%s'" % user_id
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def cleanup(self, admin = False):
-		self.connect()
 		if admin:
 			oldest = datetime.utcnow() - timedelta(hours = 9000)
 			ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
@@ -260,53 +196,34 @@ class YonderDb(object):
 			ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
 			admin_condition = " and V.user_id != '%s'" % adminkey
 		query = "select video_id from videos V where V.ts < '%s'" % ts + admin_condition
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
+		self.execute(query)
 		ids = []
 		for row in self.cur.fetchall():
 			ids.append(row[0])
 		if len(ids) > 0:
 			query = "Delete C FROM videos V join comments C on V.video_id = C.video_id where V.ts < '%s'" % ts + admin_condition
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
+			self.execute(query)
 			query = "Delete L FROM videos V join location L on V.video_id = L.video_id where V.ts < '%s'" % ts + admin_condition
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
+			self.execute(query)
 			query = "Delete S FROM videos V join seen S on V.video_id = S.video_id where V.ts < '%s'" % ts + admin_condition
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
+			self.execute(query)
 			query = "Delete V from videos V where V.ts < '%s'" % ts + admin_condition
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+			self.execute(query)
 		return ids
 
 	def flag_check(self):
-		self.connect()
 		query = "update comments set visible=-1 where flag > 3"
-		logging.debug("Execute: " + query)
-		self.cur.execute(query)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
+		self.execute(query)
 
 	def fake_rating(self):
-		self.connect()
 		query = "select video_id from videos where boost = 0 and user_id = '%s'" % adminkey
-		self.cur.execute(query)
-		logging.debug("Executing " + query)
+		self.execute(query)
 		from random import randint
 		for row in self.cur.fetchall():
 			points = randint(10,30)
 			query = "update videos set boost = boost +(%s) where video_id = '%s'" % (points, row[0])
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
+			self.execute(query)
 			self.update_score(row[0], True, points)
-		self.conn.commit()
-		self.cur.close()
-		self.conn.close()
 
 	def update_score(self, id, video, points): # no local commit
 		if video:
@@ -314,22 +231,18 @@ class YonderDb(object):
 		else:
 			user_id_query = "select user_id from comments where comment_id = '%s'" % (id)
 
-		logging.debug("Execute: " + user_id_query)
-		self.cur.execute(user_id_query)
+		self.execute(user_id_query)
 		row = self.cur.fetchone()
 		if row is not None:
 			user_id = row[0]
 			query = "update users set score=score+(%s) where user_id = '%s'" % (points,user_id)
-			logging.debug("Execute: " + query)
-			self.cur.execute(query)
+			self.execute(query)
 		else:
 			logging.error("Cannot update user score")
 
 	def get_score(self, user_id):
 		query = "select score from users where user_id = '%s'" % user_id
-		self.connect()
-		self.cur.execute(query)
-		logging.debug("Executing " + query)
+		self.execute(query)
 		row = self.cur.fetchone()
 		score = 0
 		if row is not None:
@@ -337,3 +250,71 @@ class YonderDb(object):
 		else:
 			logging.error("Cannot find user score")
 		return score
+
+	def get_channels(self, user_id, sort):
+		channel_list = []
+		query = "select channel_id, name from channels"
+		if sort == "new":
+			query = "select channel_id, name from channels limit 1"
+		self.execute(query)
+		for row in self.cur.fetchall():
+			logging.debug(row[0])
+			channel = {"id": row[0], "name": row[1]}
+			channel_list.append(channel)
+		return channel_list
+
+	def get_video_votes(self, user_id, ts):
+		video_vote_list = []
+		query = "SELECT count(*) as count, caption, video_id FROM votes join videos on video_id = item_id " \
+				"where item = 'video' and videos.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
+			self.execute(query)
+			info = self.cur.fetchone()
+			video_vote_list.append({"count": row[0], "caption": row[1], "channel": info[0]})
+		return video_vote_list
+
+	def get_comment_votes(self, user_id, ts):
+		comment_vote_list = []
+		query = "SELECT count(*) as count, comment, video_id FROM votes join comments on comment_id = item_id " \
+				"where item = 'comment' and comments.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			query = "select caption, channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
+			self.execute(query)
+			info = self.cur.fetchone()
+			comment_vote_list.append({"count": row[0], "comment": row[1],"caption": info[0], "channel": info[1]})
+
+		return comment_vote_list
+
+	def get_channel_votes(self, user_id, ts):
+		channel_vote_list = []
+		query = "SELECT count(*) as count, name FROM votes join channels on channel_id = item_id " \
+				"where item = 'channel' and channels.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			channel_vote_list.append({"count": row[0], "name": row[1]})
+		return channel_vote_list
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
