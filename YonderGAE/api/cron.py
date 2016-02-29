@@ -10,14 +10,14 @@ gcs.set_default_retry_params(my_default_retry_params)
 
 class Cron (object):
 
-    def cleanup(self):
+    def run(self):
         yonderdb = YonderDb()
-        ids = yonderdb.cleanup(False)
-        ids += yonderdb.cleanup(True)
-        yonderdb.flag_check()
-        yonderdb.fake_rating()
+        ids = yonderdb.cleanup()
+        yonderdb.cron_set_invisible()
+        # yonderdb.fake_rating()
         for id in ids:
             file_name = "/yander/" + id + ".mp4"
             logging.info("Deleting %s" % id)
             write_retry_params = gcs.RetryParams(backoff_factor=1.1)
             gcs.delete(file_name, retry_params=write_retry_params) # when removing invisible admin videos, 14 first videos wont be there
+        yonderdb.set_hot_score()

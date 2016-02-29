@@ -12,10 +12,10 @@ gcs.set_default_retry_params(my_default_retry_params)
 
 class Upload(object):
 
-	def add_video(self, video, caption, user_id, longitude, latitude):
+	def add_video(self, video, caption, user_id, channel):
 		file_name = "/yander/" + video.filename
 		logging.info("Adding new video %s" % video.filename[:-4])
-		logging.debug("Caption '%s' User %s Longitude %s Latitude %s" % (caption, user_id, longitude, latitude))
+		logging.debug("Caption '%s' User %s Longitude %s" % (caption, user_id, channel))
 		write_retry_params = gcs.RetryParams(backoff_factor=1.1)
 		gcs_file = gcs.open(file_name,
 		                    "w",
@@ -26,7 +26,7 @@ class Upload(object):
 		gcs_file.write(file_content)
 		gcs_file.close()
 		yonderdb = YonderDb()
-		yonderdb.add_video(video.filename[:-4], caption, user_id, longitude, latitude)
+		yonderdb.add_video(video.filename[:-4], caption, user_id, channel)
 		from util import User
 		if user_id != "897d1e5hb8u47u56jh6":
 			email_body = "Caption '%s' User %s" % (caption, user_id)
@@ -35,74 +35,30 @@ class Upload(object):
 
 class Feed(object):
 
-	def get_videos(self, user_id, longitude, latitude, count = False):
-		radius = float(5000)
-		longitude = float(longitude)
-		latitude = float(latitude)
-		rlon1 = longitude - (radius / abs(math.cos(math.radians(latitude)) * 69))
-		rlon2 = longitude + (radius / abs(math.cos(math.radians(latitude)) * 69))
-		rlat1 = latitude - (radius / 69)
-		rlat2 = latitude + (radius / 69)
-		limit = 0
-		video_ids = []
-
+	def get_videos(self, user_id, channel):
 		yonderdb = YonderDb()
-		seen_count = yonderdb.recently_seen(user_id, 70)
-		logging.info("Seen count past 70 hours %s" % seen_count)
-		if seen_count <= 20:
-			limit = randint(7,9)
-		else:
-			seen_count = yonderdb.recently_seen(user_id, 24)
-			logging.info("Seen count past 24 hours %s" % seen_count)
-			if seen_count <= 15:
-				limit = randint(5,7)
-			else:
-				seen_count = yonderdb.recently_seen(user_id, 12)
-				logging.info("Seen count past 12 hours %s" % seen_count)
-				if seen_count <= 12:
-					limit = randint(5,7)
-				else:
-					seen_count = yonderdb.recently_seen(user_id, 6)
-					logging.info("Seen count past 6 hours %s" % seen_count)
-					if seen_count <= 10:
-						limit = randint(3,5)
-					else:
-						seen_count = yonderdb.recently_seen(user_id, 3)
-						logging.info("Seen count past 3 hours %s" % seen_count)
-						if seen_count <= 8:
-							limit = randint(3,5)
-
-		video_ids = yonderdb.get_videos(user_id, longitude, latitude, rlon1, rlon2, rlat1, rlat2, limit)
+		video_ids = yonderdb.get_videos(user_id, channel)
 		videos_info = []
 		if len(video_ids) > 0:
-			videos_info = yonderdb.get_video_info(video_ids)
-
-		if len(video_ids) == 0 and not count and limit != 0:
-			from util import User
-			email_body = "User %s" % (user_id)
-			#User.email("No content", email_body)
-		if not count:
-			yonderdb.add_seen(user_id, video_ids)
+			videos_info = yonderdb.get_video_info(video_ids, user_id)
+		yonderdb.add_seen(user_id, video_ids)
 		return videos_info
 
-	def get_my_videos(self, user_id, uploaded, commented):
+	def get_video(self, user_id, video):
 		yonderdb = YonderDb()
-		video_ids = yonderdb.get_my_videos(user_id, uploaded, commented)
-		return video_ids
+		video_ids = [video]
+		videos_info = yonderdb.get_video_info(video_ids, user_id)
+		return videos_info
 
 	def get_videos_info(self, video_ids):
 		yonderdb = YonderDb()
 		videos_info = []
 		if len(video_ids) > 0:
-			videos_info = yonderdb.get_video_info(video_ids)
+			videos_info = yonderdb.get_video_info(video_ids, user_id)
 		return videos_info
 
 
 class Video(object):
-	def add_flag(self, video_id, user_id):
-		yonderdb = YonderDb()
-		yonderdb.flag_video(video_id, user_id)
-
 	def add_rating(self, video_id, rating, user_id):
 		yonderdb = YonderDb()
 		yonderdb.rate_video(video_id, int(rating), user_id)

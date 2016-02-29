@@ -10,3 +10,11 @@ class Channels(object):
 		yonderdb = YonderDb()
 		channels = yonderdb.get_channels(user_id, sort)
 		return channels
+
+	def add_channel(self, channel, user_id):
+		yonderdb = YonderDb()
+		yonderdb.add_channel(channel, user_id)
+
+	def rate_channel(self, channel_id, rating, user_id):
+		yonderdb = YonderDb()
+		yonderdb.rate_channel(channel_id, rating, user_id)

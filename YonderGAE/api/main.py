@@ -18,10 +18,9 @@ class Videos(webapp2.RequestHandler):
 			video = self.request.POST.multi["uploadedfile"]
 			caption = self.request.get("caption")
 			user_id = self.request.get("user")
-			longitude = self.request.get("long")
-			latitude = self.request.get("lat")
+			channel = self.request.get("channel")
 			upload = Upload()
-			upload.add_video(video, caption, user_id, longitude, latitude)
+			upload.add_video(video, caption, user_id, channel)
 		except Exception:
 			logging.exception("Failed uploading the video")
 			out = {"success": 0}
@@ -34,18 +33,14 @@ class Videos(webapp2.RequestHandler):
 	def get(self):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
-			longitude = self.request.GET["long"]
-			latitude = self.request.GET["lat"]
 			user_id = self.request.GET["user"]
-			search_type = self.request.GET["search"]
 			feed = Feed()
-			if search_type == "near":
-				video_ids = feed.get_videos(user_id, longitude, latitude)
-			elif search_type == "mine":
-				video_ids = feed.get_my_videos(user_id, True, True)
-			elif search_type == "count":
-				video_ids = feed.get_videos(user_id, longitude, latitude, True)
-				video_ids = len(video_ids)
+			if "channel" in  self.request.GET:
+				channel = self.request.GET["channel"]
+				video_ids = feed.get_videos(user_id, channel)
+			if "video" in  self.request.GET:
+				video = self.request.GET["video"]
+				video_ids = feed.get_video(user_id, video)
 		except Exception:
 			logging.exception("Failed looking for videos")
 			out = {"success": 0}
@@ -96,8 +91,9 @@ class Comments(webapp2.RequestHandler):
 	def get(self, video_id):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
+			user_id = self.request.get("user")
 			comment = Comment()
-			comment_list = comment.get_comments(video_id)
+			comment_list = comment.get_comments(video_id, user_id)
 		except Exception:
 			logging.exception("Failed getting comments")
 			out = {"success": 0}
@@ -156,6 +152,24 @@ class RateComment(webapp2.RequestHandler):
 			self.response.write(json.dumps(out))
 		else:
 			logging.info("Comment rated successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
+class RateChannel(webapp2.RequestHandler):
+
+	def post(self, channel_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			rating = self.request.POST["rating"]
+			user_id = self.request.POST["user"]
+			channel = Channels()
+			channel.rate_channel(channel_id, rating, user_id)
+		except Exception:
+			logging.exception("Failed to rate channel %s" % channel_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Channel rated successfully")
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
@@ -249,6 +263,22 @@ class Channel(webapp2.RequestHandler):
 			out = {"success": 1, "channels": channels_list}
 			self.response.write(json.dumps(out))
 
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.POST["user"]
+			channel_name = self.request.POST["channel"]
+			channels = Channels()
+			channels.add_channel(channel_name, user_id)
+		except Exception:
+			logging.exception("Failed to add a comment")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Channel added successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
 
 class Notification(webapp2.RequestHandler):
 
@@ -272,12 +302,13 @@ class CronJob(webapp2.RequestHandler):
 
 	def get(self):
 		cron = Cron()
-		cron.cleanup()
+		cron.run()
 
 # Every request associated to user id
 app = webapp2.WSGIApplication([(r"/cron", CronJob),
 							   (r"/videos", Videos),
 							   (r"/channels", Channel),
+							   (r"/channels/(\d+)/rating", RateChannel),
 							   (r"/notifications", Notification),
                                (r"/videos/info", VideosInfo),
                                (r"/myvideos/info", MyVideosInfo),

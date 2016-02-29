@@ -10,14 +10,10 @@ class Comment (object):
 			email_body = "Caption: '%s' Comment '%s' User %s" % (caption, comment, user_id)
 			User.email("New Comment", email_body)
 
-	def get_comments(self, video_id):
+	def get_comments(self, video_id, user_id):
 		yonderdb = YonderDb()
-		comment_list = yonderdb.get_comments(video_id)
+		comment_list = yonderdb.get_comments(video_id, user_id)
 		return comment_list
-
-	def add_flag(self, comment_id, user_id):
-		yonderdb = YonderDb()
-		yonderdb.flag_comment(comment_id, user_id)
 
 	def rate_comment(self, comment_id, rating, user_id):
 		yonderdb = YonderDb()
