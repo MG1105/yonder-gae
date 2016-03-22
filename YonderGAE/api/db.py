@@ -25,14 +25,14 @@ class YonderDb(object):
 		rating = 0
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		caption = caption.replace("'", "\\'")
-		query = "insert into videos values ('%s', '%s', '%s', 1, '%s', %d, 0, %s)" % (video_id, user_id, ts, caption, rating, channel_id)
+		query = "insert into videos (video_id, user_id, ts, caption, channel_id) values ('%s', '%s', '%s', '%s', %s)" % (video_id, user_id, ts, caption, channel_id)
 		self.execute(query)
 		#self.update_score(video_id, True, "10")
 
 	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		comment = comment.replace("'", "\\'")
-		query = "insert into comments values ('%s', '%s', '%s', '%s', 0, 1, '%s')" % (comment_id, comment, video_id, user_id, ts)
+		query = "insert into comments (comment_id, comment, video_id, user_id, ts) values ('%s', '%s', '%s', '%s', '%s')" % (comment_id, comment, video_id, user_id, ts)
 		self.execute(query)
 		query = "select caption from videos where video_id = '%s'" % video_id
 		self.execute(query)
@@ -87,16 +87,19 @@ class YonderDb(object):
 	def get_channels(self, user_id, sort):
 		channel_list = []
 		if sort == "new":
-			query = "select channel_id, name, rating from channels where visible = 1 order by ts DESC"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by C.ts DESC"
 		elif sort == "top":
-			query = "select channel_id, name, rating from channels where visible = 1 order by rating DESC"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by rating DESC"
 		else:
-			query = "select channel_id, name, rating from channels where visible = 1 order by hot_score DESC"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": row[2], "rated": rated, "unseen":unseen}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen}
 			channel_list.append(channel)
 		return channel_list
 
@@ -150,7 +153,7 @@ class YonderDb(object):
 
 	def add_vote(self, user_id, item, item_id, rating):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into votes values ('%s','%s', '%s', %s, '%s') ON DUPLICATE KEY UPDATE vote = %s, ts = '%s'" % (user_id, item, item_id, rating, ts, rating, ts)
+		query = "insert into votes (user_id, item, item_id, vote, ts) values ('%s','%s', '%s', %s, '%s') ON DUPLICATE KEY UPDATE vote = %s, ts = '%s'" % (user_id, item, item_id, rating, ts, rating, ts)
 		self.execute(query)
 		return self.cur.rowcount
 
@@ -167,7 +170,7 @@ class YonderDb(object):
 	def add_seen(self, user_id, video_ids):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		for id in video_ids:
-			query = "insert into seen values ('%s','%s', '%s') ON DUPLICATE KEY UPDATE ts = '%s'" % (user_id, id, ts, ts)
+			query = "insert into seen (user_id, video_id, ts) values ('%s','%s', '%s') ON DUPLICATE KEY UPDATE ts = '%s'" % (user_id, id, ts, ts)
 			self.execute(query)
 
 	def update_score(self, id, item, points): # no local commit
@@ -231,7 +234,7 @@ class YonderDb(object):
 
 	def update_last_request(self, user_id, version):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into users values ('%s', NULL, '%s', NULL, NULL, 0, '%s', NULL) on duplicate key update last_request = values(last_request)" % (user_id, ts, ts)
+		query = "insert into users (user_id, last_request, install_date) values ('%s', '%s', '%s') on duplicate key update last_request = values(last_request)" % (user_id, ts, ts)
 		self.execute(query)
 		if self.cur.rowcount == 1:
 			from util import User
@@ -242,15 +245,31 @@ class YonderDb(object):
 
 	def update_last_ping(self, user_id):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into users values ('%s', '%s', NULL, NULL, NULL, 0, '%s', NULL) on duplicate key update last_ping = values(last_ping)" % (user_id, ts, ts)
+		query = "insert into users (user_id, last_ping, install_date) values ('%s', '%s', '%s') on duplicate key update last_ping = values(last_ping)" % (user_id, ts, ts)
 		self.execute(query)
 
 	### Notifications
 
+	def get_last_notification_seen_ts(self, user_id, seen):
+		query = "select last_notification_seen from users where user_id = '%s'" % user_id
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None or row[0] is None:
+			ts = '2016-01-01 00:00:00'
+		else:
+			ts = row[0].strftime("%Y-%m-%d %H:%M:%S")
+		if seen == "1":
+			now = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+			query = "update users set last_notification_seen='%s' where user_id = '%s'" % (now, user_id)
+			self.execute(query)
+		return ts
+
+
+
 	def get_video_votes(self, user_id, ts):
 		video_vote_list = []
 		query = "SELECT count(*) as count, caption, video_id FROM votes join videos on video_id = item_id " \
-				"where item = 'video' and videos.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+				"where item = 'video' and videos.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
@@ -262,7 +281,7 @@ class YonderDb(object):
 	def get_comment_votes(self, user_id, ts):
 		comment_vote_list = []
 		query = "SELECT count(*) as count, comment, video_id FROM votes join comments on comment_id = item_id " \
-				"where item = 'comment' and comments.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+				"where item = 'comment' and comments.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			query = "select caption, channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
@@ -274,14 +293,14 @@ class YonderDb(object):
 
 	def get_channel_votes(self, user_id, ts):
 		channel_vote_list = []
-		query = "SELECT count(*) as count, name FROM votes join channels on channel_id = item_id " \
-				"where item = 'channel' and channels.user_id = '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+		query = "SELECT count(*) as count, name, channel_id FROM votes join channels on channel_id = item_id " \
+				"where item = 'channel' and channels.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			channel_vote_list.append({"count": row[0], "name": row[1]})
+			channel_vote_list.append({"count": row[0], "name": row[1], "channel_id": row[2]})
 		return channel_vote_list
 
-	def get_channel_removed(self, user_id, ts):
+	def get_channels_removed(self, user_id, ts):
 		list = []
 		query = "SELECT name FROM channels where channels.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
 		self.execute(query)
@@ -289,28 +308,78 @@ class YonderDb(object):
 			list.append({"name": row[0]})
 		return list
 
-	def get_new_videos_owned_channel(self, user_id, ts):
-		notification_list = []
-		query = "SELECT count(*) as count, C.name FROM videos V join channels C on V.channel_id = C.channel_id " \
-				"where C.user_id == '%s' and V.user_id != '%s' and V.ts > '%s' group by C.channel_id" % (user_id, user_id, ts)
+	def get_videos_removed(self, user_id, ts):
+		list = []
+		query = "SELECT caption FROM videos where videos.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1]})
+			list.append({"name": row[0]})
+		return list
+
+	def get_comments_removed(self, user_id, ts):
+		list = []
+		query = "SELECT comment FROM comments where comments.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			list.append({"name": row[0]})
+		return list
+
+	def get_new_channel_videos(self, user_id, ts):
+		notification_list = []
+		query = "SELECT count(*), C.name, C.channel_id FROM videos V join channels C on V.channel_id = C.channel_id " \
+				"where C.user_id = '%s' and V.user_id != '%s' and V.ts > '%s' and V.visible = 1 and C.visible = 1 " \
+				"group by C.channel_id;" % (user_id, user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			notification_list.append({"count": row[0], "name": row[1], "channel_id": row[2]})
 		return notification_list
 
-	def get_new_videos_replied_channel(self, user_id, ts):
+	def get_new_video_comments(self, user_id, ts):
 		notification_list = []
-		query = "SELECT count(*) as count, C.name FROM videos V join channels C on V.channel_id = C.channel_id " \
-				"where C.user_id == '%s' and V.user_id != '%s' and V.ts > '%s' group by C.channel_id" % (user_id, user_id, ts)
+		query = "SELECT count(*), V.caption, V.video_id FROM videos V join comments C on V.video_id= C.video_id " \
+				"where C.user_id != '%s' and V.user_id = '%s' and C.ts > '%s' and V.visible = 1 and C.visible = 1 " \
+				"group by V.video_id;" % (user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1]})
+			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2]})
+		return notification_list
+
+	def get_other_video_replies(self, user_id, ts):
+		notification_list = []
+		oldest = datetime.utcnow() - timedelta(hours = 24)
+		follow_ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
+		# join videos with channels where you recently uploaded video
+		query = "SELECT count(*), C.name, C.channel_id FROM videos V join " \
+				"(SELECT C.channel_id, C.name, C.user_id, C.visible FROM videos V join channels C on V.channel_id = C.channel_id " \
+				"where V.user_id = '%s' and C.user_id != '%s' and V.ts > '%s' and V.visible = 1 and C.visible = 1  group by C.channel_id) C on V.channel_id = C.channel_id " \
+				"join (select max(ts) as last_reply_ts, channel_id from videos where user_id = '%s' group by channel_id) M on V.channel_id = M.channel_id " \
+				"where C.user_id != '%s' and V.user_id != '%s' and V.ts > '%s' and V.ts > M.last_reply_ts and V.visible = 1 and C.visible = 1 " \
+				"group by C.channel_id;" % (user_id, user_id, follow_ts,user_id, user_id, user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			notification_list.append({"count": row[0], "name": row[1], "channel_id":row[2]})
+		return notification_list
+
+	def get_other_comment_replies(self, user_id, ts):
+		notification_list = []
+		oldest = datetime.utcnow() - timedelta(hours = 24)
+		follow_ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
+		# join comments with videos where you recently uploaded video
+		query = "SELECT count(*), V.caption, V.video_id FROM comments C join " \
+				"(SELECT V.video_id, V.caption, V.user_id, V.visible FROM videos V join comments C on V.video_id= C.video_id " \
+				"where C.user_id = '%s' and V.user_id != '%s' and C.ts > '%s' and V.visible = 1 and C.visible = 1  group by V.video_id) V on V.video_id= C.video_id " \
+				"join (select max(ts) as last_reply_ts, video_id from comments where user_id = '%s' group by video_id) M on V.video_id = M.video_id " \
+				"where C.user_id != '%s' and V.user_id != '%s' and C.ts > '%s' and C.ts > M.last_reply_ts and V.visible = 1 and C.visible = 1 " \
+				"group by V.video_id" % (user_id, user_id, follow_ts, user_id, user_id, user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2]})
 		return notification_list
 
 	### Cron
 
 	def cleanup(self):
-		oldest = datetime.utcnow() - timedelta(hours = 24)
+		oldest = datetime.utcnow() - timedelta(hours = 1) #### Change!!!
 		ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
 
 		query = "select video_id from videos V where V.removed_ts < '%s' and visible < 1" % ts
@@ -349,6 +418,11 @@ class YonderDb(object):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		query = "update videos set visible=-1, removed_ts = '%s' where rating < -4" % ts
 		self.execute(query)
+
+
+		query = "update videos set removed_ts = '%s' where visible = 0" % ts ##### CHANGE ME
+		self.execute(query)
+
 		query = "update comments set visible=-1, removed_ts = '%s' where rating < -4" % ts
 		self.execute(query)
 		query = "update channels set visible=-1, removed_ts = '%s' where rating < -4" % ts
@@ -365,7 +439,8 @@ class YonderDb(object):
 			self.update_score(row[0], True, points)
 
 	def set_hot_score(self):
-		query = "select channel_id, rating, ts from channels where visible = 1"
+		query = "select C.channel_id, sum(IFNULL(V.rating, 0)) + C.rating as rating, C.ts from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			hot_score = self.get_hot_score(row[2], row[1])

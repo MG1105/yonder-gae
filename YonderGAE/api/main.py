@@ -279,6 +279,22 @@ class Channel(webapp2.RequestHandler):
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
+class Contact(webapp2.RequestHandler):
+
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.POST["user"]
+			message = self.request.POST["message"]
+			User.email("Contact Us message from %s" % user_id, message)
+		except Exception:
+			logging.exception("Failed to email message")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Email sent successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
 
 class Notification(webapp2.RequestHandler):
 
@@ -308,6 +324,7 @@ class CronJob(webapp2.RequestHandler):
 app = webapp2.WSGIApplication([(r"/cron", CronJob),
 							   (r"/videos", Videos),
 							   (r"/channels", Channel),
+							   (r"/contact", Contact),
 							   (r"/channels/(\d+)/rating", RateChannel),
 							   (r"/notifications", Notification),
                                (r"/videos/info", VideosInfo),
