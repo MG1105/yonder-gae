@@ -32,7 +32,7 @@ class YonderDb(object):
 	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		comment = comment.replace("'", "\\'")
-		query = "insert into comments (comment_id, comment, video_id, user_id, ts) values ('%s', '%s', '%s', '%s', '%s')" % (comment_id, comment, video_id, user_id, ts)
+		query = "insert into comments (comment, video_id, user_id, ts, nickname) values ('%s', '%s', '%s', '%s', '%s')" % (comment, video_id, user_id, ts, nickname)
 		self.execute(query)
 		query = "select caption from videos where video_id = '%s'" % video_id
 		self.execute(query)
@@ -46,7 +46,8 @@ class YonderDb(object):
 		query = "insert into channels (name, user_id, ts) values ('%s', '%s', '%s')" % (channel, user_id, ts)
 		self.execute(query)
 
-	def get_videos(self, user_id, channel):
+	def get_videos(self, user_id, channel, channel_sort):
+		# channel_sort hot new top notification
 		query = "select video_id from videos where channel_id = '%s' and visible = 1 order by rating DESC"
 		query = query % (channel)
 		self.execute(query)
@@ -56,7 +57,7 @@ class YonderDb(object):
 
 	def get_video_info(self, video_ids, user_id):
 		info = []
-		query = "select caption, rating, boost from videos where video_id = '%s'"
+		query = "select caption, V.rating, boost, C.name from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
 		for id in video_ids:
 			rated = self.get_rated('video', id, user_id)
@@ -66,7 +67,7 @@ class YonderDb(object):
 				boost = 0
 			else:
 				boost = row[2]
-			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated}
+			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated, "channel_name": row[3]}
 			self.execute(comments_total_query % id)
 			row = self.cur.fetchone()
 			stats["comments_total"] = row[0]
@@ -76,30 +77,30 @@ class YonderDb(object):
 
 	def get_comments(self, video_id, user_id):
 		comment_list = []
-		query = "select comment_id, comment, rating, 'x' from comments where video_id = '%s' and visible = 1 order by ts" % video_id
+		query = "select comment_id, comment, rating, nickname from comments where video_id = '%s' and visible = 1 order by ts" % video_id
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('comment', row[0], user_id)
-			comment = {"id": row[0].decode(encoding='UTF-8',errors='strict'), "content": row[1], "rating":row[2], "nickname":row[3], "rated":rated}
+			comment = {"id": str(row[0]), "content": row[1], "rating":row[2], "nickname":row[3], "rated":rated}
 			comment_list.append(comment)
 		return comment_list
 
 	def get_channels(self, user_id, sort):
 		channel_list = []
 		if sort == "new":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by C.ts DESC"
 		elif sort == "top":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by rating DESC"
 		else:
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3]}
 			channel_list.append(channel)
 		return channel_list
 
@@ -339,6 +340,10 @@ class YonderDb(object):
 		query = "SELECT count(*), V.caption, V.video_id FROM videos V join comments C on V.video_id= C.video_id " \
 				"where C.user_id != '%s' and V.user_id = '%s' and C.ts > '%s' and V.visible = 1 and C.visible = 1 " \
 				"group by V.video_id;" % (user_id, user_id, ts)
+		if user_id == adminkey:
+			query = "SELECT count(*), V.caption, V.video_id FROM videos V join comments C on V.video_id= C.video_id " \
+				"where C.user_id != '%s' and C.ts > '%s' and V.visible = 1 and C.visible = 1 " \
+				"group by V.video_id;" % (user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2]})
@@ -420,7 +425,7 @@ class YonderDb(object):
 		self.execute(query)
 
 
-		query = "update videos set removed_ts = '%s' where visible = 0" % ts ##### CHANGE ME
+		query = "update videos set removed_ts = '%s' where visible = 0 and removed_ts = null" % ts ##### CHANGE ME
 		self.execute(query)
 
 		query = "update comments set visible=-1, removed_ts = '%s' where rating < -4" % ts
@@ -436,7 +441,7 @@ class YonderDb(object):
 			points = randint(10,30)
 			query = "update videos set boost = boost +(%s) where video_id = '%s'" % (points, row[0])
 			self.execute(query)
-			self.update_score(row[0], True, points)
+			self.update_score(row[0], True, points) #old
 
 	def set_hot_score(self):
 		query = "select C.channel_id, sum(IFNULL(V.rating, 0)) + C.rating as rating, C.ts from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \

@@ -37,7 +37,8 @@ class Videos(webapp2.RequestHandler):
 			feed = Feed()
 			if "channel" in  self.request.GET:
 				channel = self.request.GET["channel"]
-				video_ids = feed.get_videos(user_id, channel)
+				channel_sort = self.request.GET["channel_sort"]
+				video_ids = feed.get_videos(user_id, channel, channel_sort)
 			if "video" in  self.request.GET:
 				video = self.request.GET["video"]
 				video_ids = feed.get_video(user_id, video)
@@ -286,7 +287,8 @@ class Contact(webapp2.RequestHandler):
 		try:
 			user_id = self.request.POST["user"]
 			message = self.request.POST["message"]
-			User.email("Contact Us message from %s" % user_id, message)
+			reply_to = self.request.POST["reply_to"]
+			User.email("Contact Us message from %s" % user_id, message, reply_to)
 		except Exception:
 			logging.exception("Failed to email message")
 			out = {"success": 0}

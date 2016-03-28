@@ -15,7 +15,7 @@ class Upload(object):
 	def add_video(self, video, caption, user_id, channel):
 		file_name = "/yander/" + video.filename
 		logging.info("Adding new video %s" % video.filename[:-4])
-		logging.debug("Caption '%s' User %s Longitude %s" % (caption, user_id, channel))
+		logging.debug("Caption '%s' User %s Channel %s" % (caption, user_id, channel))
 		write_retry_params = gcs.RetryParams(backoff_factor=1.1)
 		gcs_file = gcs.open(file_name,
 		                    "w",
@@ -27,17 +27,13 @@ class Upload(object):
 		gcs_file.close()
 		yonderdb = YonderDb()
 		yonderdb.add_video(video.filename[:-4], caption, user_id, channel)
-		from util import User
-		if user_id != "897d1e5hb8u47u56jh6":
-			email_body = "Caption '%s' User %s" % (caption, user_id)
-			User.email("New Video", email_body)
 
 
 class Feed(object):
 
-	def get_videos(self, user_id, channel):
+	def get_videos(self, user_id, channel, channel_sort):
 		yonderdb = YonderDb()
-		video_ids = yonderdb.get_videos(user_id, channel)
+		video_ids = yonderdb.get_videos(user_id, channel, channel_sort)
 		videos_info = []
 		if len(video_ids) > 0:
 			videos_info = yonderdb.get_video_info(video_ids, user_id)

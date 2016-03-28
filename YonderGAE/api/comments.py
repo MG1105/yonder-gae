@@ -4,11 +4,7 @@ class Comment (object):
 
 	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
 		yonderdb = YonderDb()
-		caption = yonderdb.add_comment(nickname, comment_id, comment, video_id, user_id)
-		from util import User
-		if user_id != "897d1e5hb8u47u56jh6":
-			email_body = "Caption: '%s' Comment '%s' User %s" % (caption, comment, user_id)
-			User.email("New Comment", email_body)
+		yonderdb.add_comment(nickname, comment_id, comment, video_id, user_id)
 
 	def get_comments(self, video_id, user_id):
 		yonderdb = YonderDb()

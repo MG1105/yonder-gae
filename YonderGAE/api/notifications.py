@@ -22,48 +22,73 @@ class Notifications(object):
 		other_video_replies = yonderdb.get_other_video_replies(user_id, ts)
 		other_comment_replies = yonderdb.get_other_comment_replies(user_id, ts)
 
-		for row in video_votes:
-			name = row["caption"][:50]
-			content = str(row["count"]) + ' more people voted on your video "' + name + '"\n'
-			content += "Channel: " + row["channel"]
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
-		for row in comment_votes:
-			name = row["comment"][:50]
-			content = str(row["count"]) + ' more people voted on your comment "' + name + '"\n'
-			content += "Video: " + row["caption"] + "\n"
-			content += "Channel: " + row["channel"]
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
-		for row in channel_votes:
-			name = row["name"]
-			content = str(row["count"]) + ' more people voted on your channel "' + name + '"\n'
-			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": ""})
-		for row in channels_removed:
-			name = row["name"]
-			content = "Channel %s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
-		for row in videos_removed:
-			name = row["name"][:50]
-			content = "Video %s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
-		for row in comments_removed:
-			name = row["name"][:50]
-			content = "Comment %s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
+
 		for row in new_channel_videos:
 			name = row["name"][:50]
-			content = str(row["count"]) + ' more videos posted to your channel "' + name + '"\n'
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more reaction was posted on your hashtag #' + name
+			else:
+				content = str(row["count"]) + ' more reactions were posted on your hashtag #' + name
 			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": ""})
 		for row in new_video_comments:
 			name = row["name"][:50]
-			content = str(row["count"]) + ' more comments on your video "' + name + '"\n'
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more comment was posted on your reaction "' + name + '"'
+			else:
+				content = str(row["count"]) + ' more comments were posted on your reaction "' + name + '"'
 			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
+
+		for row in video_votes:
+			name = row["caption"][:50]
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more person voted on your reaction "' + name + '" on '
+			else:
+				content = str(row["count"]) + ' more people voted on your reaction "' + name + '" on '
+			content += "#" + row["channel"]
+			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
+		for row in comment_votes:
+			name = row["comment"][:50]
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more person voted on your comment "' + name + '" on '
+			else:
+				content = str(row["count"]) + ' more people voted on your comment "' + name + '" on '
+			content += "reaction " + row["caption"] + " on "
+			content += "#" + row["channel"]
+			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
+		for row in channel_votes:
+			name = row["name"]
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more person voted on your hashtag #' + name
+			else:
+				content = str(row["count"]) + ' more people voted on your hashtag #' + name
+			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": ""})
+
+		for row in channels_removed:
+			name = row["name"]
+			content = "#%s received 5 downvotes and was removed" % name
+			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
+		for row in videos_removed:
+			name = row["name"][:50]
+			content = "Your reaction %s received 5 downvotes and was removed" % name
+			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
+		for row in comments_removed:
+			name = row["name"][:50]
+			content = "Your comment %s received 5 downvotes and was removed" % name
+			notification_list.append({"content": content, "channel_id": "", "video_id": ""})
+
 		for row in other_video_replies:
 			name = row["name"][:50]
-			content = str(row["count"]) + ' more videos posted to channel "' + name + '"\n'
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more reaction was posted on #' + name
+			else:
+				content = str(row["count"]) + ' more reactions were posted on #' + name
 			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": ""})
 		for row in other_comment_replies:
 			name = row["name"][:50]
-			content = str(row["count"]) + ' more comments on video "' + name + '"\n'
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more comment was posted on reaction "' + name + '"'
+			else:
+				content = str(row["count"]) + ' more comments were posted on reaction "' + name + '"'
 			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"]})
 
 
