@@ -2,9 +2,10 @@ from db import YonderDb
 
 class Comment (object):
 
-	def add_comment(self, nickname, comment_id, comment, video_id, user_id):
+	def add_comment(self, nickname, comment, video_id, user_id):
 		yonderdb = YonderDb()
-		yonderdb.add_comment(nickname, comment_id, comment, video_id, user_id)
+		id = yonderdb.add_comment(nickname, comment, video_id, user_id)
+		return id
 
 	def get_comments(self, video_id, user_id):
 		yonderdb = YonderDb()

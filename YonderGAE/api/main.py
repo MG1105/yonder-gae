@@ -77,16 +77,15 @@ class Comments(webapp2.RequestHandler):
 			user_id = self.request.POST["user"]
 			nickname = self.request.POST["nickname"]
 			text = self.request.POST["comment"]
-			comment_id = self.request.POST["id"]
 			comment = Comment()
-			comment.add_comment(nickname, comment_id, text, video_id, user_id)
+			id = comment.add_comment(nickname, text, video_id, user_id)
 		except Exception:
 			logging.exception("Failed to add a comment")
 			out = {"success": 0}
 			self.response.write(json.dumps(out))
 		else:
 			logging.info("Comment added successfully")
-			out = {"success": 1}
+			out = {"success": 1, "comment_id":id}
 			self.response.write(json.dumps(out))
 
 	def get(self, video_id):
@@ -222,7 +221,7 @@ class Ping(webapp2.RequestHandler):
 			out = {"success": 0}
 			self.response.write(json.dumps(out))
 		else:
-			logging.info("User pinged successfully")
+			logging.debug("User pinged successfully")
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
@@ -312,7 +311,8 @@ class Notification(webapp2.RequestHandler):
 			out = {"success": 0}
 			self.response.write(json.dumps(out))
 		else:
-			logging.info("Notifications retrieved successfully")
+			if seen == 1:
+				logging.info("Notifications retrieved successfully")
 			out = {"success": 1, "notifications": notifications_list}
 			self.response.write(json.dumps(out))
 
