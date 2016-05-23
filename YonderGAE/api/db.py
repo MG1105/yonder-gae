@@ -72,6 +72,24 @@ class YonderDb(object):
 		logging.debug(str(info))
 		return info
 
+	def get_feed_videos(self, user_id):
+		info = []
+		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
+		query = "select V.video_id, caption, V.rating, boost, C.name, (select username from users U where V.user_id = U.user_id) as username from videos V join channels C on V.channel_id = C.channel_id limit 20"
+		self.execute(query)
+		for row in self.cur.fetchall():
+			if row[3] is None:
+				boost = 0
+			else:
+				boost = row[3]
+			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": "usertest", "thumbnail_id":"1463792086036"}
+			self.execute(comments_total_query % row[0])
+			row = self.cur.fetchone()
+			stats["comments_count"] = row[0]
+			info.append(stats)
+		logging.debug(str(info))
+		return info
+
 	def get_comments(self, video_id, user_id):
 		comment_list = []
 		query = "select comment_id, comment, rating, nickname from comments where video_id = '%s' and visible = 1 order by ts" % video_id
@@ -97,7 +115,7 @@ class YonderDb(object):
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3]}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "thumbnail_id":"1463792086036"}
 			channel_list.append(channel)
 		return channel_list
 

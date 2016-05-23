@@ -12,7 +12,7 @@ gcs.set_default_retry_params(my_default_retry_params)
 
 class Upload(object):
 
-	def add_video(self, video, caption, user_id, channel):
+	def add_video(self, video, thumbnail, caption, user_id, channel):
 		file_name = "/yander/" + video.filename
 		logging.info("Adding new video %s" % video.filename[:-4])
 		logging.debug("Caption '%s' User %s Channel %s" % (caption, user_id, channel))
@@ -25,11 +25,24 @@ class Upload(object):
 		file_content = video.file.read()
 		gcs_file.write(file_content)
 		gcs_file.close()
+
+		file_name = "/yander/" + thumbnail.filename
+		logging.info("Adding new thumbnail %s" % thumbnail.filename[:-4])
+		write_retry_params = gcs.RetryParams(backoff_factor=1.1)
+		gcs_file = gcs.open(file_name,
+		                    "w",
+		                    content_type="image/jpg",
+		                    options={"x-goog-acl": "public-read"},
+		                    retry_params=write_retry_params)
+		file_content = thumbnail.file.read()
+		gcs_file.write(file_content)
+
+		gcs_file.close()
 		yonderdb = YonderDb()
 		yonderdb.add_video(video.filename[:-4], caption, user_id, channel)
 
 
-class Feed(object):
+class Story(object):
 
 	def get_videos(self, user_id, channel, channel_sort):
 		yonderdb = YonderDb()
@@ -58,3 +71,12 @@ class Video(object):
 	def add_rating(self, video_id, rating, user_id):
 		yonderdb = YonderDb()
 		yonderdb.rate_video(video_id, int(rating), user_id)
+
+
+
+class Feed(object):
+
+	def get_videos(self, user_id):
+		yonderdb = YonderDb()
+		videos = yonderdb.get_feed_videos(user_id)
+		return videos
