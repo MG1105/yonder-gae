@@ -54,8 +54,9 @@ class YonderDb(object):
 
 	def get_video_info(self, video_ids, user_id):
 		info = []
-		query = "select caption, V.rating, boost, C.name from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
+		query = "select caption, V.rating, boost, C.name, V.user_id, V.gold from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
+		username_query = "select username from users where user_id = '%s'"
 		for id in video_ids:
 			rated = self.get_rated('video', id, user_id)
 			self.execute(query % id)
@@ -64,10 +65,17 @@ class YonderDb(object):
 				boost = 0
 			else:
 				boost = row[2]
-			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated, "channel_name": row[3]}
+			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated, "channel_name": row[3], "gold": row[5]}
+			profile_id = row[4]
+			if profile_id == adminkey:
+				profile_id = 10154273532898270 # Medi fb ID testing
 			self.execute(comments_total_query % id)
 			row = self.cur.fetchone()
 			stats["comments_total"] = row[0]
+			self.execute(username_query % profile_id)
+			row = self.cur.fetchone()
+			stats["username"] = row[0]
+			stats["user_id"] = profile_id
 			info.append(stats)
 		logging.debug(str(info))
 		return info
@@ -82,7 +90,7 @@ class YonderDb(object):
 				boost = 0
 			else:
 				boost = row[3]
-			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": "usertest", "thumbnail_id":"1463792086036"}
+			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": "usertest", "thumbnail_id":"1466142952772"}
 			self.execute(comments_total_query % row[0])
 			row = self.cur.fetchone()
 			stats["comments_count"] = row[0]
@@ -115,9 +123,76 @@ class YonderDb(object):
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "thumbnail_id":"1463792086036"}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3]}
 			channel_list.append(channel)
 		return channel_list
+
+	def get_profile(self, profile_id, user_id):
+		query = "select user_id, username, first_name, following, followers, gold_received, tokens, score from users where user_id = '%s'" % profile_id
+		self.execute(query)
+		row = self.cur.fetchone()
+		profile = {"id": row[0], "username": row[1], "first_name": row[2], "following": row[3], "followers": row[4], "gold_received": row[5], "tokens": row[6], "score": row[7]}
+		query = "select * from follow where follower = '%s' and following = '%s'" % (user_id, profile_id)
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None:
+			profile["followed"] = 0
+		else:
+			profile["followed"] = 1
+		return profile
+
+	def add_profile(self, android_id, account_id, first_name, last_name, email, username):
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+		query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s' " \
+				"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, android_id)
+		self.execute(query)
+		query = "update channels set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+		self.execute(query)
+		query = "update comments set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+		self.execute(query)
+		query = "update seen set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+		self.execute(query)
+		query = "update videos set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+		self.execute(query)
+		query = "update votes set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+		self.execute(query)
+
+	def follow(self, user_id, following):
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+		query = "insert into follow (follower, following, ts) values ('%s','%s', '%s')" % (user_id, following, ts)
+		self.execute(query)
+		query = "update users set following=following+1 where user_id = '%s'" % (user_id)
+		self.execute(query)
+		query = "update users set followers=followers+1 where user_id = '%s'" % (following)
+		self.execute(query)
+
+	def unfollow(self, user_id, following):
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+		query = "delete from follow where follower = '%s' and following = '%s'" % (user_id, following)
+		self.execute(query)
+		query = "update users set following=following-1 where user_id = '%s'" % (user_id)
+		self.execute(query)
+		query = "update users set followers=followers-1 where user_id = '%s'" % (following)
+		self.execute(query)
+
+
+	def giveGold(self, user_id, to, video_id):
+		query = "select tokens from users where user_id = '%s'" % user_id
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row[0] > 0:
+			ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+			query = "insert into gold (sender, receiver, video_id, ts) values ('%s','%s', '%s', '%s')" % (user_id, to, video_id, ts)
+			self.execute(query)
+			query = "update users set tokens=tokens-1 where user_id = '%s'" % (user_id)
+			self.execute(query)
+			query = "update users set gold_received=gold_received+1 where user_id = '%s'" % (to)
+			self.execute(query)
+			query = "update videos set gold=gold+1 where video_id = '%s'" % (video_id)
+			self.execute(query)
+			return 1
+		else:
+			return 0
 
 	def rate_comment(self,comment_id, rating, user_id):
 		# if user_id == adminkey:
@@ -254,9 +329,9 @@ class YonderDb(object):
 				"on duplicate key update last_request = values(last_request), visits = visits + 1" % (user_id, ts, ts)
 		self.execute(query)
 		if self.cur.rowcount == 1:
-			from util import User
+			from util import Util
 			email_body = "User %s" % (user_id)
-			User.email("New User", email_body)
+			Util.email("New User", email_body)
 		query = "update users set version=%s where user_id = '%s'" % (version, user_id)
 		self.execute(query)
 
@@ -281,7 +356,13 @@ class YonderDb(object):
 			self.execute(query)
 		return ts
 
-
+	def get_channel_thumbnail(self, channel_id):
+		query = "SELECT video_id FROM yonderdb.videos where channel_id = '%s' and visible = 1 order by rating DESC limit 1;" % channel_id
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None:
+			return ""
+		return row[0]
 
 	def get_video_votes(self, user_id, ts):
 		video_vote_list = []
@@ -295,7 +376,7 @@ class YonderDb(object):
 			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
 			self.execute(query)
 			info = self.cur.fetchone()
-			video_vote_list.append({"count": row[0], "caption": row[1], "channel": info[0], "video_id":row[2]})
+			video_vote_list.append({"count": row[0], "caption": row[1], "channel": info[0], "video_id":row[2], "thumbnail_id":row[2]})
 		return video_vote_list
 
 	def get_comment_votes(self, user_id, ts):
@@ -310,7 +391,7 @@ class YonderDb(object):
 			query = "select caption, channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
 			self.execute(query)
 			info = self.cur.fetchone()
-			comment_vote_list.append({"count": row[0], "comment": row[1],"caption": info[0], "channel": info[1], "video_id":row[2]})
+			comment_vote_list.append({"count": row[0], "comment": row[1],"caption": info[0], "channel": info[1], "video_id":row[2], "thumbnail_id": row[2]})
 
 		return comment_vote_list
 
@@ -323,37 +404,37 @@ class YonderDb(object):
 				"where item = 'channel' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			channel_vote_list.append({"count": row[0], "name": row[1], "channel_id": row[2]})
+			channel_vote_list.append({"count": row[0], "name": row[1], "channel_id": row[2], "thumbnail_id": self.get_channel_thumbnail(row[2])})
 		return channel_vote_list
 
 	def get_channels_removed(self, user_id, ts):
 		list = []
-		query = "SELECT name FROM channels where channels.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
+		query = "SELECT name, channel_id FROM channels where channels.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
 		if user_id == adminkey:
-			query = "SELECT name FROM channels where visible < 1 and removed_ts > '%s'" % (ts)
+			query = "SELECT name, channel_id FROM channels where visible < 1 and removed_ts > '%s'" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			list.append({"name": row[0]})
+			list.append({"name": row[0], "thumbnail_id":self.get_channel_thumbnail(row[1])})
 		return list
 
 	def get_videos_removed(self, user_id, ts):
 		list = []
-		query = "SELECT caption FROM videos where videos.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
+		query = "SELECT caption, video_id FROM videos where videos.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
 		if user_id == adminkey:
-			query = "SELECT caption FROM videos where visible < 1 and removed_ts > '%s'" % (ts)
+			query = "SELECT caption, video_id FROM videos where visible < 1 and removed_ts > '%s'" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			list.append({"name": row[0]})
+			list.append({"name": row[0], "thumbnail_id": row[1]})
 		return list
 
 	def get_comments_removed(self, user_id, ts):
 		list = []
-		query = "SELECT comment FROM comments where comments.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
+		query = "SELECT comment, video_id FROM comments where comments.user_id = '%s' and visible < 1 and removed_ts > '%s'" % (user_id, ts)
 		if user_id == adminkey:
-			query = "SELECT comment FROM comments where visible < 1 and removed_ts > '%s'" % (ts)
+			query = "SELECT comment, video_id FROM comments where visible < 1 and removed_ts > '%s'" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			list.append({"name": row[0]})
+			list.append({"name": row[0], "thumbnail_id": row[1]})
 		return list
 
 	def get_new_channel_videos(self, user_id, ts):
@@ -367,7 +448,7 @@ class YonderDb(object):
 				"group by C.channel_id;" % (user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1], "channel_id": row[2]})
+			notification_list.append({"count": row[0], "name": row[1], "channel_id": row[2], "thumbnail_id": self.get_channel_thumbnail(row[2])})
 		return notification_list
 
 	def get_new_video_comments(self, user_id, ts):
@@ -381,7 +462,7 @@ class YonderDb(object):
 				"group by V.video_id;" % (user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2]})
+			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2], "thumbnail_id": row[2]})
 		return notification_list
 
 	def get_other_video_replies(self, user_id, ts):
@@ -397,7 +478,7 @@ class YonderDb(object):
 				"group by C.channel_id;" % (user_id, user_id, follow_ts,user_id, user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1], "channel_id":row[2]})
+			notification_list.append({"count": row[0], "name": row[1], "channel_id":row[2], "thumbnail_id":self.get_channel_thumbnail(row[2])})
 		return notification_list
 
 	def get_other_comment_replies(self, user_id, ts):
@@ -413,8 +494,27 @@ class YonderDb(object):
 				"group by V.video_id" % (user_id, user_id, follow_ts, user_id, user_id, user_id, ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
-			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2]})
+			notification_list.append({"count": row[0], "name": row[1], "video_id":row[2], "thumbnail_id": row[2]})
 		return notification_list
+
+
+	def get_gold_received(self, user_id, ts):
+		gold_received_list = []
+		query = "SELECT count(*) as count, G.video_id, V.caption FROM gold G join videos V on G.video_id = V.video_id " \
+				"where receiver = '%s' and G.ts > '%s' group by G.video_id;" % (user_id, ts)
+		self.execute(query)
+		for row in self.cur.fetchall():
+			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[1])
+			self.execute(query)
+			info = self.cur.fetchone()
+			gold_received_list.append({"count": row[0], "video_id" :row[1] , "caption": row[2], "channel": info[0], "thumbnail_id": row[1]})
+		return gold_received_list
+
+	def get_followers(self, user_id, ts):
+		query = "SELECT count(*) as count FROM follow where following = '%s' and ts > '%s';" % (user_id, ts)
+		self.execute(query)
+		row = self.cur.fetchone()
+		return row[0]
 
 	### Cron
 

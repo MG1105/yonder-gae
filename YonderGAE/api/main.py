@@ -8,8 +8,9 @@ from channels import Channels
 from notifications import Notifications
 from comments import Comment
 from videos import Video
-from util import User
+from util import Util
 from cron import Cron
+from user import User
 
 class Videos(webapp2.RequestHandler):
 
@@ -278,6 +279,84 @@ class Channel(webapp2.RequestHandler):
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
 
+
+class Follow(webapp2.RequestHandler):
+
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.POST["user"]
+			following = self.request.POST["following"]
+			follow = self.request.POST["follow"]
+			user = User()
+			user.setFollow(user_id, following, follow)
+		except Exception:
+			logging.exception("Failed to follow user")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("User followed successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
+
+class Gold(webapp2.RequestHandler):
+
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.POST["user"]
+			to = self.request.POST["to"]
+			video_id = self.request.POST["video_id"]
+			user = User()
+			gold = user.giveGold(user_id, to, video_id)
+		except Exception:
+			logging.exception("Failed to follow user")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("User followed successfully")
+			out = {"success": 1, "gold": gold}
+			self.response.write(json.dumps(out))
+
+class Profile(webapp2.RequestHandler):
+
+	def get(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.GET["user_id"]
+			profile_id = self.request.GET["profile_id"]
+			user = User()
+			profile = user.get_profile(profile_id, user_id)
+		except Exception:
+			logging.exception("Failed getting profile")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Profile retrieved successfully")
+			out = {"success": 1, "profile": profile}
+			self.response.write(json.dumps(out))
+
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			android_id = self.request.POST["android_id"]
+			account_id = self.request.POST["account_id"]
+			first_name = self.request.POST["first_name"]
+			last_name = self.request.POST["last_name"]
+			email = self.request.POST["email"]
+			username = self.request.POST["username"]
+			user = User()
+			user.add_profile(android_id, account_id, first_name, last_name, email, username)
+		except Exception:
+			logging.exception("Failed to add the profile info")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Profile added successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
 class Contact(webapp2.RequestHandler):
 
 	def post(self):
@@ -286,7 +365,7 @@ class Contact(webapp2.RequestHandler):
 			user_id = self.request.POST["user"]
 			message = self.request.POST["message"]
 			reply_to = self.request.POST["reply_to"]
-			User.email("Contact Us message from %s" % user_id, message, reply_to)
+			Util.email("Contact Us message from %s" % user_id, message, reply_to)
 		except Exception:
 			logging.exception("Failed to email message")
 			out = {"success": 0}
@@ -326,6 +405,9 @@ app = webapp2.WSGIApplication([(r"/cron", CronJob),
 							   (r"/videos", Videos),
 							   (r"/feed", HomeFeed),
 							   (r"/channels", Channel),
+							   (r"/profile", Profile),
+							   (r"/follow", Follow),
+							   (r"/gold", Gold),
 							   (r"/contact", Contact),
 							   (r"/channels/(\d+)/rating", RateChannel),
 							   (r"/notifications", Notification),
