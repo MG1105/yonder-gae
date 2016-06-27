@@ -29,10 +29,10 @@ class YonderDb(object):
 		self.execute(query)
 		#self.update_score(video_id, True, "10")
 
-	def add_comment(self, nickname, comment, video_id, user_id):
+	def add_comment(self, comment, video_id, user_id):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		comment = comment.replace("'", "\\'")
-		query = "insert into comments (comment, video_id, user_id, ts, nickname) values ('%s', '%s', '%s', '%s', '%s')" % (comment, video_id, user_id, ts, nickname)
+		query = "insert into comments (comment, video_id, user_id, ts) values ('%s', '%s', '%s', '%s')" % (comment, video_id, user_id, ts)
 		self.execute(query)
 		return self.cur.lastrowid
 
@@ -77,34 +77,39 @@ class YonderDb(object):
 			stats["username"] = row[0]
 			stats["user_id"] = profile_id
 			info.append(stats)
-		logging.debug(str(info))
 		return info
 
-	def get_feed_videos(self, user_id):
+	def get_feed_videos(self, user_id, type):
 		info = []
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
-		query = "select V.video_id, caption, V.rating, boost, C.name, (select username from users U where V.user_id = U.user_id) as username from videos V join channels C on V.channel_id = C.channel_id limit 20"
-		self.execute(query)
+
+		if type == "recent":
+			query = "select V.video_id, caption, V.rating, boost, (select name from channels C where C.channel_id = V.channel_id) as name, " \
+					"(select username from users U where V.user_id = U.user_id) as username from videos V where V.user_id = '%s' and V.visible = 1 order by V.ts DESC limit 20;"
+		elif type == "home":
+			query = "select V.video_id, caption, V.rating, boost, (select name from channels C where C.channel_id = V.channel_id) as name, " \
+					"(select username from users U where V.user_id = U.user_id) as username from " \
+					"(select following from follow where follower = '%s') as F left join videos V on F.following = V.user_id where V.visible = 1 order by V.ts DESC limit 20;"
+		self.execute(query % user_id)
 		for row in self.cur.fetchall():
 			if row[3] is None:
 				boost = 0
 			else:
 				boost = row[3]
-			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": "usertest", "thumbnail_id":"1466142952772"}
+			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": row[5], "thumbnail_id":row[0]}
 			self.execute(comments_total_query % row[0])
 			row = self.cur.fetchone()
 			stats["comments_count"] = row[0]
 			info.append(stats)
-		logging.debug(str(info))
 		return info
 
 	def get_comments(self, video_id, user_id):
 		comment_list = []
-		query = "select comment_id, comment, rating, nickname from comments where video_id = '%s' and visible = 1 order by ts" % video_id
+		query = "select comment_id, comment, rating, (select username from users U where U.user_id = C.user_id) as username from comments C where video_id = '%s' and visible = 1 order by ts" % video_id
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('comment', row[0], user_id)
-			comment = {"id": str(row[0]), "content": row[1], "rating":row[2], "nickname":row[3], "rated":rated}
+			comment = {"id": str(row[0]), "content": row[1], "rating":row[2], "username":row[3], "rated":rated}
 			comment_list.append(comment)
 		return comment_list
 

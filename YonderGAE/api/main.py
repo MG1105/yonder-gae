@@ -78,10 +78,9 @@ class Comments(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			user_id = self.request.POST["user"]
-			nickname = self.request.POST["nickname"]
 			text = self.request.POST["comment"]
 			comment = Comment()
-			id = comment.add_comment(nickname, text, video_id, user_id)
+			id = comment.add_comment(text, video_id, user_id)
 		except Exception:
 			logging.exception("Failed to add a comment")
 			out = {"success": 0}
@@ -234,8 +233,9 @@ class HomeFeed(webapp2.RequestHandler):
 		self.response.headers["Content-Type"] = "application/json"
 		try:
 			user_id = self.request.GET["user"]
+			type = self.request.GET["type"] # can be recent videos for profile or actual home feed
 			feed = Feed()
-			videos = feed.get_videos(user_id)
+			videos = feed.get_videos(user_id, type)
 		except Exception:
 			logging.exception("Failed looking for feed videos")
 			out = {"success": 0}

@@ -30,8 +30,8 @@ class User(object):
 		yonderdb = YonderDb()
 		yonderdb.update_last_request(user_id, version)
 
-		if version == "1":
-			upgrade = 0
+		if int(version) < 10:
+			upgrade = 2
 		else:
 			upgrade = 0
 		user_info = yonderdb.get_user_info(user_id, upgrade)

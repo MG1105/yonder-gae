@@ -10,7 +10,6 @@ class Notifications(object):
 		yonderdb = YonderDb()
 		notification_list = []
 		ts = yonderdb.get_last_notification_seen_ts(user_id, seen)
-		ts = '2015-06-18 20:19:40'
 
 		video_votes = yonderdb.get_video_votes(user_id, ts)
 		comment_votes = yonderdb.get_comment_votes(user_id, ts)
@@ -28,6 +27,13 @@ class Notifications(object):
 
 		gold_received = yonderdb.get_gold_received(user_id, ts)
 		followers = yonderdb.get_followers(user_id, ts)
+
+		# notification_list.append({"content": 'You received 3 Vidici Awards for your scene "Vidici Romance" on #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 1})
+		# notification_list.append({"content": '315 more people started following you', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 2})
+		# notification_list.append({"content": '65 more people voted on your scene "Vidici Romance" on #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 3})
+		# notification_list.append({"content": '46 more people voted on your hashtag #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 5})
+		# notification_list.append({"content": '28 more comments were posted on your scene "Vidici Romance"', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 6})
+		# notification_list.append({"content": '15 more scenes were added to your hashtag #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 7})
 
 		for row in gold_received:
 			name = row["caption"][:50]

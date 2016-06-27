@@ -76,7 +76,7 @@ class Video(object):
 
 class Feed(object):
 
-	def get_videos(self, user_id):
+	def get_videos(self, user_id, type):
 		yonderdb = YonderDb()
-		videos = yonderdb.get_feed_videos(user_id)
+		videos = yonderdb.get_feed_videos(user_id, type)
 		return videos
