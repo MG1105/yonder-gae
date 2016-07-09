@@ -210,6 +210,42 @@ class Verify(webapp2.RequestHandler):
 			out = {"success": 1, "user": user_info}
 			self.response.write(json.dumps(out))
 
+class Unlock(webapp2.RequestHandler):
+
+	def get(self, user_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user = User()
+			code = self.request.get("code")
+			unlocked = user.unlock(user_id, code)
+		except Exception:
+			logging.exception("Failed unlocking user %s" % user_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Unlocked successfully")
+			out = {"success": 1, "unlocked": unlocked}
+			self.response.write(json.dumps(out))
+
+
+class WaitList(webapp2.RequestHandler):
+
+	def post(self):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user_id = self.request.POST["user"]
+			email = self.request.POST["email"]
+			user = User()
+			user.join_waitlist(user_id, email)
+		except Exception:
+			logging.exception("Failed to join wait list")
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Joined wait list successfully")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
+
 class Ping(webapp2.RequestHandler):
 
 	def get(self, user_id):
@@ -226,6 +262,7 @@ class Ping(webapp2.RequestHandler):
 			logging.debug("User pinged successfully")
 			out = {"success": 1}
 			self.response.write(json.dumps(out))
+
 
 class HomeFeed(webapp2.RequestHandler):
 
@@ -418,4 +455,6 @@ app = webapp2.WSGIApplication([(r"/cron", CronJob),
 							   (r"/comments/(\d+)/rating", RateComment),
                                (r"/videos/(\d+)/rating", VideoRating),
                                (r"/users/(\w+)/ping", Ping),
+                               (r"/users/(\w+)/unlock", Unlock),
+							   (r"/waitlist", WaitList),
                                (r"/users/(\w+)/verify", Verify)], debug=True)

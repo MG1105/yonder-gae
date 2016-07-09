@@ -45,7 +45,7 @@ class YonderDb(object):
 	def get_videos(self, user_id, channel, channel_sort):
 		# channel_sort hot new top notification
 		if channel_sort == "hot" or channel_sort == "new" or channel_sort == "top" or channel_sort == "notification":
-			query = "select video_id from videos where channel_id = '%s' and visible = 1 order by rating DESC"
+			query = "select video_id from videos where channel_id = '%s' and visible = 1 order by ts"
 		query = query % (channel)
 		self.execute(query)
 		ids = [row[0] for row in self.cur.fetchall()]
@@ -67,8 +67,6 @@ class YonderDb(object):
 				boost = row[2]
 			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated, "channel_name": row[3], "gold": row[5]}
 			profile_id = row[4]
-			if profile_id == adminkey:
-				profile_id = 10154273532898270 # Medi fb ID testing
 			self.execute(comments_total_query % id)
 			row = self.cur.fetchone()
 			stats["comments_total"] = row[0]
@@ -85,10 +83,10 @@ class YonderDb(object):
 
 		if type == "recent":
 			query = "select V.video_id, caption, V.rating, boost, (select name from channels C where C.channel_id = V.channel_id) as name, " \
-					"(select username from users U where V.user_id = U.user_id) as username from videos V where V.user_id = '%s' and V.visible = 1 order by V.ts DESC limit 20;"
+					"(select username from users U where V.user_id = U.user_id) as username, unix_timestamp(V.ts) from videos V where V.user_id = '%s' and V.visible = 1 order by V.ts DESC limit 20;"
 		elif type == "home":
 			query = "select V.video_id, caption, V.rating, boost, (select name from channels C where C.channel_id = V.channel_id) as name, " \
-					"(select username from users U where V.user_id = U.user_id) as username from " \
+					"(select username from users U where V.user_id = U.user_id) as username, unix_timestamp(V.ts) from " \
 					"(select following from follow where follower = '%s') as F left join videos V on F.following = V.user_id where V.visible = 1 order by V.ts DESC limit 20;"
 		self.execute(query % user_id)
 		for row in self.cur.fetchall():
@@ -96,7 +94,7 @@ class YonderDb(object):
 				boost = 0
 			else:
 				boost = row[3]
-			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": row[5], "thumbnail_id":row[0]}
+			stats = {"video_id": row[0], "caption": row[1], "rating": row[2] + boost, "channel_name": row[4], "channel_id":"", "username": row[5], "thumbnail_id":row[0], "ts":row[6]}
 			self.execute(comments_total_query % row[0])
 			row = self.cur.fetchone()
 			stats["comments_count"] = row[0]
@@ -116,19 +114,22 @@ class YonderDb(object):
 	def get_channels(self, user_id, sort):
 		channel_list = []
 		if sort == "new":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by C.ts DESC"
 		elif sort == "top":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by rating DESC"
 		else:
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3]}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4]}
 			channel_list.append(channel)
 		return channel_list
 
@@ -147,20 +148,27 @@ class YonderDb(object):
 		return profile
 
 	def add_profile(self, android_id, account_id, first_name, last_name, email, username):
-		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s' " \
-				"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, android_id)
+		query = "select * from users where user_id = '%s'" % account_id
 		self.execute(query)
-		query = "update channels set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
-		self.execute(query)
-		query = "update comments set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
-		self.execute(query)
-		query = "update seen set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
-		self.execute(query)
-		query = "update videos set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
-		self.execute(query)
-		query = "update votes set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
-		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None:
+			ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+			query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s' " \
+					"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, android_id)
+			self.execute(query)
+			query = "update channels set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+			self.execute(query)
+			query = "update comments set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+			self.execute(query)
+			query = "update seen set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+			self.execute(query)
+			query = "update videos set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+			self.execute(query)
+			query = "update votes set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
+			self.execute(query)
+		else:
+			query = "delete from users where user_id = '%s'" % (android_id)
+			self.execute(query)
 
 	def follow(self, user_id, following):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -343,6 +351,29 @@ class YonderDb(object):
 	def update_last_ping(self, user_id):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		query = "insert into users (user_id, last_ping, install_date) values ('%s', '%s', '%s') on duplicate key update last_ping = values(last_ping)" % (user_id, ts, ts)
+		self.execute(query)
+
+	def unlock(self, user_id, code):
+		ts = datetime.utcnow()
+		query = "select expire_ts, used, cap from codes where code = '%s'" % code
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None:
+			return 0
+		elif row[0] < ts:
+			return -1
+		elif row[1] > row[2]:
+			return -2
+		else:
+			query = "update codes set used=used+1 where code = '%s'" % code
+			self.execute(query)
+			query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
+			self.execute(query)
+			return 1
+
+	def join_waitlist(self, user_id, email):
+		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+		query = "insert into waitlist (email, user_id, ts) values ('%s', '%s', '%s')  on duplicate key update email = '%s', ts = '%s'" % (email, user_id, ts, email, ts)
 		self.execute(query)
 
 	### Notifications

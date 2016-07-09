@@ -63,3 +63,14 @@ class User(object):
 	def ping(self, user_id):
 		yonderdb = YonderDb()
 		yonderdb.update_last_ping(user_id)
+
+	def unlock(self, user_id, code):
+		yonderdb = YonderDb()
+		return yonderdb.unlock(user_id, code)
+
+	def join_waitlist(self, user_id, email):
+		yonderdb = YonderDb()
+		yonderdb.join_waitlist(user_id, email)
+
+
+

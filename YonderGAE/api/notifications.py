@@ -3,6 +3,7 @@ import logging
 import math
 from db import YonderDb
 from random import randint
+from random import randint
 
 class Notifications(object):
 
@@ -10,6 +11,7 @@ class Notifications(object):
 		yonderdb = YonderDb()
 		notification_list = []
 		ts = yonderdb.get_last_notification_seen_ts(user_id, seen)
+		# ts = "2016-07-04 16:32:58"
 
 		video_votes = yonderdb.get_video_votes(user_id, ts)
 		comment_votes = yonderdb.get_comment_votes(user_id, ts)
@@ -28,12 +30,14 @@ class Notifications(object):
 		gold_received = yonderdb.get_gold_received(user_id, ts)
 		followers = yonderdb.get_followers(user_id, ts)
 
-		# notification_list.append({"content": 'You received 3 Vidici Awards for your scene "Vidici Romance" on #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 1})
+		# notification_list.append({"content": 'You received 3 Vidici Awards for your scene "My all time favorite" on #QuotesToLiveBy', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 1})
 		# notification_list.append({"content": '315 more people started following you', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 2})
-		# notification_list.append({"content": '65 more people voted on your scene "Vidici Romance" on #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 3})
-		# notification_list.append({"content": '46 more people voted on your hashtag #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 5})
-		# notification_list.append({"content": '28 more comments were posted on your scene "Vidici Romance"', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 6})
-		# notification_list.append({"content": '15 more scenes were added to your hashtag #LipSyncBattle', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 7})
+		# notification_list.append({"content": '65 more people voted on your scene "My all time favorite" on #QuotesToLiveBy', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 3})
+		# notification_list.append({"content": '46 more people voted on your hashtag #QuotesToLiveBy', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 5})
+		# notification_list.append({"content": '28 more comments were posted on your scene "My all time favorite"', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 6})
+		# notification_list.append({"content": '15 more scenes were added to your hashtag #QuotesToLiveBy', "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 7})
+
+		max_id = 100000000000
 
 		for row in gold_received:
 			name = row["caption"][:50]
@@ -42,14 +46,14 @@ class Notifications(object):
 			else:
 				content =  'You received %s Vidici Awards for your scene "' % row["count"] + name + '" on '
 			content += "#" + row["channel"]
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 1})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 1})
 
 		if followers > 0:
 			if followers == 1:
 				content = str(followers) + " more person started following you"
 			else:
 				content = str(followers) + " more people started following you"
-			notification_list.append({"content": content, "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 2})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": "", "thumbnail_id" : "", "notification_id": 2})
 
 		for row in video_votes:
 			name = row["caption"][:50]
@@ -58,7 +62,7 @@ class Notifications(object):
 			else:
 				content = str(row["count"]) + ' more people voted on your scene "' + name + '" on '
 			content += "#" + row["channel"]
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 3})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 3})
 		for row in comment_votes:
 			name = row["comment"][:50]
 			if row["count"] == 1:
@@ -67,14 +71,14 @@ class Notifications(object):
 				content = str(row["count"]) + ' more people voted on your comment "' + name + '" on '
 			content += "scene " + row["caption"] + " on "
 			content += "#" + row["channel"]
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 4})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 4})
 		for row in channel_votes:
 			name = row["name"]
 			if row["count"] == 1:
 				content = str(row["count"]) + ' more person voted on your hashtag #' + name
 			else:
 				content = str(row["count"]) + ' more people voted on your hashtag #' + name
-			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 5})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": row["channel_id"], "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 5})
 
 		for row in new_video_comments:
 			name = row["name"][:50]
@@ -82,7 +86,7 @@ class Notifications(object):
 				content = str(row["count"]) + ' more comment was posted on your scene "' + name + '"'
 			else:
 				content = str(row["count"]) + ' more comments were posted on your scene "' + name + '"'
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 6})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 6})
 
 		for row in new_channel_videos:
 			name = row["name"][:50]
@@ -90,20 +94,20 @@ class Notifications(object):
 				content = str(row["count"]) + ' more scene was added to your hashtag #' + name
 			else:
 				content = str(row["count"]) + ' more scenes were added to your hashtag #' + name
-			notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": "", "thumbnail_id" : "1466142952772", "notification_id": 7})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": row["channel_id"], "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 7})
 
 		for row in channels_removed:
 			name = row["name"]
 			content = "#%s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 8})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 8})
 		for row in videos_removed:
 			name = row["name"][:50]
 			content = "Your scene %s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 9})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 9})
 		for row in comments_removed:
 			name = row["name"][:50]
 			content = "Your comment %s received 5 downvotes and was removed" % name
-			notification_list.append({"content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 10})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 10})
 
 		# for row in other_video_replies:
 		# 	name = row["name"][:50]
@@ -118,7 +122,7 @@ class Notifications(object):
 				content = str(row["count"]) + ' more comment was posted on scene "' + name + '"'
 			else:
 				content = str(row["count"]) + ' more comments were posted on scene "' + name + '"'
-			notification_list.append({"content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 11})
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": row["video_id"], "thumbnail_id" : row["thumbnail_id"], "notification_id": 11})
 
 
 		return notification_list
