@@ -153,6 +153,9 @@ class YonderDb(object):
 		row = self.cur.fetchone()
 		if row is None:
 			ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
+			first_name = MySQLdb.escape_string(first_name)
+			last_name = MySQLdb.escape_string(last_name)
+			email = MySQLdb.escape_string(email)
 			query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s' " \
 					"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, android_id)
 			self.execute(query)
@@ -362,7 +365,7 @@ class YonderDb(object):
 			return 0
 		elif row[0] < ts:
 			return -1
-		elif row[1] > row[2]:
+		elif row[1] >= row[2]:
 			return -2
 		else:
 			query = "update codes set used=used+1 where code = '%s'" % code
@@ -538,6 +541,9 @@ class YonderDb(object):
 		gold_received_list = []
 		query = "SELECT count(*) as count, G.video_id, V.caption FROM gold G join videos V on G.video_id = V.video_id " \
 				"where receiver = '%s' and G.ts > '%s' group by G.video_id;" % (user_id, ts)
+		if user_id == adminkey:
+			query = "SELECT count(*) as count, G.video_id, V.caption FROM gold G join videos V on G.video_id = V.video_id " \
+				"where G.ts > '%s' group by G.video_id;" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[1])
