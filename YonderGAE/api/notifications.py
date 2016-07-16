@@ -24,7 +24,7 @@ class Notifications(object):
 		new_channel_videos = yonderdb.get_new_channel_videos(user_id, ts)
 		new_video_comments = yonderdb.get_new_video_comments(user_id, ts)
 
-		#other_video_replies = yonderdb.get_other_video_replies(user_id, ts)
+		other_video_replies = yonderdb.get_other_video_replies(user_id, ts)
 		other_comment_replies = yonderdb.get_other_comment_replies(user_id, ts)
 
 		gold_received = yonderdb.get_gold_received(user_id, ts)
@@ -109,13 +109,13 @@ class Notifications(object):
 			content = "Your comment %s received 5 downvotes and was removed" % name
 			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": "", "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 10})
 
-		# for row in other_video_replies:
-		# 	name = row["name"][:50]
-		# 	if row["count"] == 1:
-		# 		content = str(row["count"]) + ' more reaction was posted on #' + name
-		# 	else:
-		# 		content = str(row["count"]) + ' more reactions were posted on #' + name
-		# 	notification_list.append({"content": content, "channel_id": row["channel_id"], "video_id": ""})
+		for row in other_video_replies:
+			name = row["name"][:50]
+			if row["count"] == 1:
+				content = str(row["count"]) + ' more reaction was posted on #' + name
+			else:
+				content = str(row["count"]) + ' more reactions were posted on #' + name
+			notification_list.append({"id": randint(0,max_id), "content": content, "channel_id": row["channel_id"], "video_id": "", "thumbnail_id" : row["thumbnail_id"], "notification_id": 11})
 		for row in other_comment_replies:
 			name = row["name"][:50]
 			if row["count"] == 1:

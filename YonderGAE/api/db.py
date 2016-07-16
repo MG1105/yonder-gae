@@ -127,6 +127,8 @@ class YonderDb(object):
 					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC"
 		self.execute(query)
 		for row in self.cur.fetchall():
+			if sort == "hot" and row[3] == 0:
+				continue
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
 			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4]}
@@ -347,7 +349,7 @@ class YonderDb(object):
 		if self.cur.rowcount == 1:
 			from util import Util
 			email_body = "User %s" % (user_id)
-			Util.email("New User", email_body)
+			# Util.email("New User", email_body)
 		query = "update users set version=%s where user_id = '%s'" % (version, user_id)
 		self.execute(query)
 
@@ -601,13 +603,17 @@ class YonderDb(object):
 		query = "update videos set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
 		self.execute(query)
 
-
-		query = "update videos set removed_ts = '%s' where visible = 0 and removed_ts is null" % ts ##### CHANGE ME
-		self.execute(query)
+		# query = "update videos set removed_ts = '%s' where visible = 0 and removed_ts is null" % ts ##### CHANGE ME
+		# self.execute(query)
 
 		query = "update comments set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
 		self.execute(query)
 		query = "update channels set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
+		self.execute(query)
+
+		query = "update channels C left join (select count(video_id) as count, sum(IFNULL(rating, 0)) as rating, channel_id from videos where visible = 1 and rating >=0 group by channel_id) V " \
+				"on C.channel_id = V.channel_id set C.visible = -2 " \
+				"where TIMESTAMPDIFF(HOUR, C.ts, now()) > 1 and C.visible = 1 and (IFNULL(V.count,0) = 0 or (V.rating + C.rating) < 3);"
 		self.execute(query)
 
 	def fake_rating(self):
