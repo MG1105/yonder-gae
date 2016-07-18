@@ -115,23 +115,22 @@ class YonderDb(object):
 		channel_list = []
 		if sort == "new":
 			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by C.ts DESC"
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by C.ts DESC limit 20"
 		elif sort == "top":
 			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by rating DESC"
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by rating DESC limit 20"
 		else:
 			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC"
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C right join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC limit 20"
 		self.execute(query)
 		for row in self.cur.fetchall():
-			if sort == "hot" and row[3] == 0:
-				continue
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4]}
+			gold = self.get_channel_gold(row[0])
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4], "gold": int(gold), "ts":row[5]}
 			channel_list.append(channel)
 		return channel_list
 
@@ -213,11 +212,6 @@ class YonderDb(object):
 			return 0
 
 	def rate_comment(self,comment_id, rating, user_id):
-		# if user_id == adminkey:
-		# 	if rating == "1":
-		# 		rating = 3
-		# 	elif rating == "-1":
-		# 		rating = -3
 		row_count = self.add_vote(user_id, 'comment', comment_id, rating)
 		if row_count != 1: # Previously voted on this
 			if rating == "1":
@@ -229,33 +223,35 @@ class YonderDb(object):
 		self.execute(query)
 
 	def rate_channel(self,channel_id, rating, user_id):
-		# if user_id == adminkey:
-		# 	if rating == "1":
-		# 		rating = 3
-		# 	elif rating == "-1":
-		# 		rating = -3
 		row_count = self.add_vote(user_id, 'channel', channel_id, rating)
 		if row_count != 1: # Previously voted on this
 			if rating == "1":
 				rating = 2
 			elif rating == "-1":
 				rating = -2
+		if user_id == adminkey:
+			from random import randint
+			if rating == "1" or rating == 2:
+				rating = randint(10,15)
+			elif rating == "-1" or rating == -2:
+				rating = -randint(10,15)
 		self.update_score(channel_id, 0, rating)
 		query = "update channels set rating=rating+(%s) where channel_id = '%s'" % (rating,channel_id)
 		self.execute(query)
 
 	def rate_video(self,video_id, rating, user_id):
-		# if user_id == adminkey:
-		# 	if rating == 1:
-		# 		rating = 3
-		# 	elif rating == -1:
-		# 		rating = -3
 		row_count = self.add_vote(user_id, 'video', video_id, rating)
 		if row_count != 1: # Previously voted on this
 			if rating == 1:
 				rating = 2
 			elif rating == -1:
 				rating = -2
+		if user_id == adminkey:
+			from random import randint
+			if rating == "1" or rating == 2:
+				rating = randint(10,15)
+			elif rating == "-1" or rating == -2:
+				rating = -randint(10,15)
 		self.update_score(video_id, 1, rating)
 		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
 		self.execute(query)
@@ -313,6 +309,12 @@ class YonderDb(object):
 	def get_unseen(self,channel_id, user_id):
 		query = "select count(*) from videos V left join (select * from yonderdb.seen where user_id = '%s' ) AS S on V.video_id = S.video_id " \
 				"where S.user_id is NULL and channel_id = '%s' and visible = 1 order by rating DESC" % (user_id, channel_id)
+		self.execute(query)
+		row = self.cur.fetchone()
+		return row[0]
+
+	def get_channel_gold(self,channel_id):
+		query = "SELECT ifnull(sum(V.gold),0) FROM channels C left join videos V on V.channel_id=C.channel_id where C.channel_id = %s;" % (channel_id)
 		self.execute(query)
 		row = self.cur.fetchone()
 		return row[0]
@@ -612,8 +614,13 @@ class YonderDb(object):
 		self.execute(query)
 
 		query = "update channels C left join (select count(video_id) as count, sum(IFNULL(rating, 0)) as rating, channel_id from videos where visible = 1 and rating >=0 group by channel_id) V " \
-				"on C.channel_id = V.channel_id set C.visible = -2 " \
-				"where TIMESTAMPDIFF(HOUR, C.ts, now()) > 1 and C.visible = 1 and (IFNULL(V.count,0) = 0 or (V.rating + C.rating) < 3);"
+				"on C.channel_id = V.channel_id set C.visible = -1 " \
+				"where TIMESTAMPDIFF(HOUR, C.ts, now()) > 1 and C.visible = 1 and IFNULL(V.count,0) = 0;"
+		self.execute(query)
+
+		query = "update channels set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) > 24 and visible = 1 and user_id != '%s'" % adminkey
+		self.execute(query)
+		query = "update videos set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) > 24 and visible = 1 and user_id != '%s'" % adminkey
 		self.execute(query)
 
 	def fake_rating(self):
