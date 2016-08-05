@@ -11,9 +11,9 @@ class User(object):
 		profile = yonderdb.get_profile(profile_id, user_id)
 		return profile
 
-	def add_profile(self, android_id, account_id, first_name, last_name, email, username):
+	def add_profile(self, android_id, account_id, first_name, last_name, email, username, college):
 		yonderdb = YonderDb()
-		yonderdb.add_profile(android_id, account_id, first_name, last_name, email, username)
+		yonderdb.add_profile(android_id, account_id, first_name, last_name, email, username, college)
 
 	def setFollow(self, user_id, following, follow):
 		yonderdb = YonderDb()
@@ -67,6 +67,10 @@ class User(object):
 	def unlock(self, user_id, code):
 		yonderdb = YonderDb()
 		return yonderdb.unlock(user_id, code)
+
+	def invited(self, user_id, invited_by):
+		yonderdb = YonderDb()
+		yonderdb.invited(user_id, invited_by)
 
 	def join_waitlist(self, user_id, email):
 		yonderdb = YonderDb()

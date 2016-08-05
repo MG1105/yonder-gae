@@ -227,6 +227,22 @@ class Unlock(webapp2.RequestHandler):
 			out = {"success": 1, "unlocked": unlocked}
 			self.response.write(json.dumps(out))
 
+class Invited(webapp2.RequestHandler):
+
+	def get(self, user_id):
+		self.response.headers["Content-Type"] = "application/json"
+		try:
+			user = User()
+			invited_by = self.request.get("by")
+			user.invited(user_id, invited_by)
+		except Exception:
+			logging.exception("Failed recording invitation open of user %s" % user_id)
+			out = {"success": 0}
+			self.response.write(json.dumps(out))
+		else:
+			logging.info("Invitation open successfully recorded")
+			out = {"success": 1}
+			self.response.write(json.dumps(out))
 
 class WaitList(webapp2.RequestHandler):
 
@@ -383,8 +399,9 @@ class Profile(webapp2.RequestHandler):
 			last_name = self.request.POST["last_name"]
 			email = self.request.POST["email"]
 			username = self.request.POST["username"]
+			college = self.request.POST["college"]
 			user = User()
-			user.add_profile(android_id, account_id, first_name, last_name, email, username)
+			user.add_profile(android_id, account_id, first_name, last_name, email, username, college)
 		except Exception:
 			logging.exception("Failed to add the profile info")
 			out = {"success": 0}
@@ -456,5 +473,6 @@ app = webapp2.WSGIApplication([(r"/cron", CronJob),
                                (r"/videos/(\d+)/rating", VideoRating),
                                (r"/users/(\w+)/ping", Ping),
                                (r"/users/(\w+)/unlock", Unlock),
+                               (r"/users/(\w+)/invited", Invited),
 							   (r"/waitlist", WaitList),
                                (r"/users/(\w+)/verify", Verify)], debug=True)

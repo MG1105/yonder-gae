@@ -56,7 +56,7 @@ class YonderDb(object):
 		info = []
 		query = "select caption, V.rating, boost, C.name, V.user_id, V.gold from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
-		username_query = "select username from users where user_id = '%s'"
+		username_query = "select username, college from users where user_id = '%s'"
 		for id in video_ids:
 			rated = self.get_rated('video', id, user_id)
 			self.execute(query % id)
@@ -73,6 +73,7 @@ class YonderDb(object):
 			self.execute(username_query % profile_id)
 			row = self.cur.fetchone()
 			stats["username"] = row[0]
+			stats["college"] = row[1]
 			stats["user_id"] = profile_id
 			info.append(stats)
 		return info
@@ -148,7 +149,7 @@ class YonderDb(object):
 			profile["followed"] = 1
 		return profile
 
-	def add_profile(self, android_id, account_id, first_name, last_name, email, username):
+	def add_profile(self, android_id, account_id, first_name, last_name, email, username, college):
 		query = "select * from users where user_id = '%s'" % account_id
 		self.execute(query)
 		row = self.cur.fetchone()
@@ -157,8 +158,8 @@ class YonderDb(object):
 			first_name = MySQLdb.escape_string(first_name)
 			last_name = MySQLdb.escape_string(last_name)
 			email = MySQLdb.escape_string(email)
-			query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s' " \
-					"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, android_id)
+			query = "update users set username = '%s', first_name = '%s', last_name = '%s', email = '%s', user_id = '%s', login = '%s', college = '%s' " \
+					"where user_id = '%s'" % (username, first_name, last_name, email, account_id, ts, college, android_id)
 			self.execute(query)
 			query = "update channels set user_id = '%s' where user_id = '%s'" % (account_id, android_id)
 			self.execute(query)
@@ -223,35 +224,35 @@ class YonderDb(object):
 		self.execute(query)
 
 	def rate_channel(self,channel_id, rating, user_id):
+		if user_id == adminkey:
+			from random import randint
+			if rating == "1":
+				rating = randint(10,15)
+			elif rating == "-1":
+				rating = -5
 		row_count = self.add_vote(user_id, 'channel', channel_id, rating)
-		if row_count != 1: # Previously voted on this
+		if row_count != 1 and user_id != adminkey: # Previously voted on this
 			if rating == "1":
 				rating = 2
 			elif rating == "-1":
 				rating = -2
-		if user_id == adminkey:
-			from random import randint
-			if rating == "1" or rating == 2:
-				rating = randint(10,15)
-			elif rating == "-1" or rating == -2:
-				rating = -randint(10,15)
 		self.update_score(channel_id, 0, rating)
 		query = "update channels set rating=rating+(%s) where channel_id = '%s'" % (rating,channel_id)
 		self.execute(query)
 
 	def rate_video(self,video_id, rating, user_id):
+		if user_id == adminkey:
+			from random import randint
+			if rating == 1:
+				rating = randint(10,15)
+			elif rating == -1:
+				rating = -5
 		row_count = self.add_vote(user_id, 'video', video_id, rating)
-		if row_count != 1: # Previously voted on this
+		if row_count != 1 and user_id != adminkey: # Previously voted on this
 			if rating == 1:
 				rating = 2
 			elif rating == -1:
 				rating = -2
-		if user_id == adminkey:
-			from random import randint
-			if rating == "1" or rating == 2:
-				rating = randint(10,15)
-			elif rating == "-1" or rating == -2:
-				rating = -randint(10,15)
 		self.update_score(video_id, 1, rating)
 		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
 		self.execute(query)
@@ -259,6 +260,8 @@ class YonderDb(object):
 	def add_vote(self, user_id, item, item_id, rating):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		query = "insert into votes (user_id, item, item_id, vote, ts) values ('%s','%s', '%s', %s, '%s') ON DUPLICATE KEY UPDATE vote = %s, ts = '%s'" % (user_id, item, item_id, rating, ts, rating, ts)
+		if user_id == adminkey:
+			query = "insert into votes (user_id, item, item_id, vote, ts) values ('%s','%s', '%s', %s, '%s') ON DUPLICATE KEY UPDATE vote = vote+%s, ts = '%s'" % (user_id, item, item_id, rating, ts, rating, ts)
 		self.execute(query)
 		return self.cur.rowcount
 
@@ -362,21 +365,34 @@ class YonderDb(object):
 
 	def unlock(self, user_id, code):
 		ts = datetime.utcnow()
-		query = "select expire_ts, used, cap from codes where code = '%s'" % code
+		query = "update codes set used=used+1 where code = '%s'" % code
 		self.execute(query)
-		row = self.cur.fetchone()
-		if row is None:
-			return 0
-		elif row[0] < ts:
-			return -1
-		elif row[1] >= row[2]:
-			return -2
-		else:
-			query = "update codes set used=used+1 where code = '%s'" % code
-			self.execute(query)
-			query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
-			self.execute(query)
-			return 1
+		query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
+		self.execute(query)
+		return 1
+
+		# query = "select expire_ts, used, cap from codes where code = '%s'" % code
+		# self.execute(query)
+		# row = self.cur.fetchone()
+		# if row is None:
+		# 	return 0
+		# elif row[0] < ts:
+		# 	return -1
+		# elif row[1] >= row[2]:
+		# 	return -2
+		# else:
+		# 	query = "update codes set used=used+1 where code = '%s'" % code
+		# 	self.execute(query)
+		# 	query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
+		# 	self.execute(query)
+		# 	return 1
+
+	def invited(self, user_id, invited_by):
+		ts = datetime.utcnow()
+		query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
+		self.execute(query)
+		query = "update users set tokens=tokens+5 where user_id like '%%%s%%'" % (invited_by)
+		self.execute(query)
 
 	def join_waitlist(self, user_id, email):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -413,13 +429,22 @@ class YonderDb(object):
 				"where item = 'video' and videos.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		if user_id == adminkey:
 			query = "SELECT count(*) as count, caption, video_id FROM votes join videos on video_id = item_id " \
-				"where item = 'video' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+				"where item = 'video' and votes.ts > '%s' group by item_id;" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			query = "select channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
 			self.execute(query)
 			info = self.cur.fetchone()
-			video_vote_list.append({"count": row[0], "caption": row[1], "channel": info[0], "video_id":row[2], "thumbnail_id":row[2]})
+
+			query = "select vote from votes where item_id = '%s' and vote > 0 and user_id = '%s' and ts > '%s'" % (row[2], adminkey, ts)
+			self.execute(query)
+			extra_people_row = self.cur.fetchone()
+			if extra_people_row is None:
+				extra_people = 0
+			else:
+				extra_people =extra_people_row[0]
+
+			video_vote_list.append({"count": row[0] + extra_people, "caption": row[1], "channel": info[0], "video_id":row[2], "thumbnail_id":row[2]})
 		return video_vote_list
 
 	def get_comment_votes(self, user_id, ts):
@@ -428,7 +453,7 @@ class YonderDb(object):
 				"where item = 'comment' and comments.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		if user_id == adminkey:
 			query = "SELECT count(*) as count, comment, video_id FROM votes join comments on comment_id = item_id " \
-				"where item = 'comment' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+				"where item = 'comment' and votes.ts > '%s' group by item_id;" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			query = "select caption, channels.name from videos join channels on videos.channel_id = channels.channel_id where video_id = '%s'" % (row[2])
@@ -444,7 +469,7 @@ class YonderDb(object):
 				"where item = 'channel' and channels.user_id = '%s' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, user_id, ts)
 		if user_id == adminkey:
 			query = "SELECT count(*) as count, name, channel_id FROM votes join channels on channel_id = item_id " \
-				"where item = 'channel' and votes.user_id != '%s' and votes.ts > '%s' group by item_id;" % (user_id, ts)
+				"where item = 'channel' and votes.ts > '%s' group by item_id;" % (ts)
 		self.execute(query)
 		for row in self.cur.fetchall():
 			channel_vote_list.append({"count": row[0], "name": row[1], "channel_id": row[2], "thumbnail_id": self.get_channel_thumbnail(row[2])})
@@ -615,12 +640,12 @@ class YonderDb(object):
 
 		query = "update channels C left join (select count(video_id) as count, sum(IFNULL(rating, 0)) as rating, channel_id from videos where visible = 1 and rating >=0 group by channel_id) V " \
 				"on C.channel_id = V.channel_id set C.visible = -1 " \
-				"where TIMESTAMPDIFF(HOUR, C.ts, now()) > 1 and C.visible = 1 and IFNULL(V.count,0) = 0;"
+				"where TIMESTAMPDIFF(MINUTE, C.ts, now()) >= 15 and C.visible = 1 and IFNULL(V.count,0) = 0;"
 		self.execute(query)
 
-		query = "update channels set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) > 24 and visible = 1 and user_id != '%s'" % adminkey
+		query = "update channels set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
 		self.execute(query)
-		query = "update videos set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) > 24 and visible = 1 and user_id != '%s'" % adminkey
+		query = "update videos set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
 		self.execute(query)
 
 	def fake_rating(self):
