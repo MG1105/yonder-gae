@@ -21,11 +21,11 @@ class YonderDb(object):
 		self.cur.execute(query)
 		self.conn.commit()
 
-	def add_video(self, video_id, caption, user_id, channel_id):
+	def add_video(self, video_id, caption, user_id, channel_id, college):
 		rating = 0
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		caption = caption.replace("'", "\\'")
-		query = "insert into videos (video_id, user_id, ts, caption, channel_id) values ('%s', '%s', '%s', '%s', %s)" % (video_id, user_id, ts, caption, channel_id)
+		query = "insert into videos (video_id, user_id, ts, caption, channel_id, college_admin) values ('%s', '%s', '%s', '%s', %s, '%s')" % (video_id, user_id, ts, caption, channel_id, college)
 		self.execute(query)
 		#self.update_score(video_id, True, "10")
 
@@ -36,10 +36,10 @@ class YonderDb(object):
 		self.execute(query)
 		return self.cur.lastrowid
 
-	def add_channel(self, channel, user_id):
+	def add_channel(self, channel, user_id, nsfw):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
 		channel = MySQLdb.escape_string(channel)
-		query = "insert into channels (name, user_id, ts) values ('%s', '%s', '%s')" % (channel, user_id, ts)
+		query = "insert into channels (name, user_id, ts, nsfw) values ('%s', '%s', '%s', %s)" % (channel, user_id, ts, nsfw)
 		self.execute(query)
 
 	def get_videos(self, user_id, channel, channel_sort):
@@ -54,7 +54,7 @@ class YonderDb(object):
 
 	def get_video_info(self, video_ids, user_id):
 		info = []
-		query = "select caption, V.rating, boost, C.name, V.user_id, V.gold from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
+		query = "select caption, V.rating, boost, C.name, V.user_id, V.gold, V.college_admin from videos V join channels C on V.channel_id = C.channel_id where V.video_id = '%s'"
 		comments_total_query = "select count(*) from comments where video_id = '%s' and visible = 1"
 		username_query = "select username, college from users where user_id = '%s'"
 		for id in video_ids:
@@ -66,6 +66,7 @@ class YonderDb(object):
 			else:
 				boost = row[2]
 			stats = {"id": id, "caption": row[0], "rating": row[1] + boost, "rated": rated, "channel_name": row[3], "gold": row[5]}
+			college_admin = row[6]
 			profile_id = row[4]
 			self.execute(comments_total_query % id)
 			row = self.cur.fetchone()
@@ -73,7 +74,14 @@ class YonderDb(object):
 			self.execute(username_query % profile_id)
 			row = self.cur.fetchone()
 			stats["username"] = row[0]
-			stats["college"] = row[1]
+			if profile_id == adminkey:
+				stats["college"] = college_admin
+				if stats["college"] is None:
+					import random
+					colleges = ["Arizona State", "Penn State", "University of Iowa", "University of Illinois", "University of Georgia", "Louisiana State", "University of Colorado", "Iowa State", "University of Wisconsin", "Tulane University", "West Virginia University", "Florida State"]
+					stats["college"] = random.choice(colleges)
+			else:
+				stats["college"] = row[1]
 			stats["user_id"] = profile_id
 			info.append(stats)
 		return info
@@ -113,25 +121,40 @@ class YonderDb(object):
 		return comment_list
 
 	def get_channels(self, user_id, sort):
+		query = "select visits, install_date from users where user_id = '%s'" % user_id
+		self.execute(query)
+		row = self.cur.fetchone()
+		if row is None:
+			visits = 1
+			installed =  datetime.utcnow()
+		else:
+			visits = row[0]
+			installed = row[1]
+		cut_off = datetime.strptime("2016-08-28 00:00:00", "%Y-%m-%d %H:%M:%S")
 		channel_list = []
 		if sort == "new":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by C.ts DESC limit 20"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 1 DAY) group by C.channel_id order by C.ts DESC limit 10"
 		elif sort == "top":
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by rating DESC limit 20"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 1 DAY) group by C.channel_id order by rating DESC limit 10"
 		else:
-			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating as rating, count(V.video_id) as videos, " \
-					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts) from channels C right join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 group by C.channel_id order by C.hot_score DESC limit 20"
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C right join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 1 DAY) group by C.channel_id order by C.hot_score DESC limit 10"
+
+		if user_id == "10206282032162320":
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 30 DAY) group by C.channel_id order by rating DESC limit 50"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
 			unseen = self.get_unseen(row[0], user_id)
 			gold = self.get_channel_gold(row[0])
-			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4], "gold": int(gold), "ts":row[5]}
+			channel = {"id": row[0], "name": row[1], "rating": int(row[2]), "rated": rated, "unseen":unseen, "videos":row[3], "username": row[4], "gold": int(gold), "ts":row[5], "nsfw":row[6]}
 			channel_list.append(channel)
 		return channel_list
 
@@ -244,7 +267,7 @@ class YonderDb(object):
 		if user_id == adminkey:
 			from random import randint
 			if rating == 1:
-				rating = randint(10,15)
+				rating = randint(50,100)
 			elif rating == -1:
 				rating = -5
 		row_count = self.add_vote(user_id, 'video', video_id, rating)
@@ -254,7 +277,11 @@ class YonderDb(object):
 			elif rating == -1:
 				rating = -2
 		self.update_score(video_id, 1, rating)
-		query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
+
+		if user_id == adminkey:
+			query = "update videos set boost=boost+(%s) where video_id = '%s'" % (rating,video_id)
+		else:
+			query = "update videos set rating=rating+(%s) where video_id = '%s'" % (rating,video_id)
 		self.execute(query)
 
 	def add_vote(self, user_id, item, item_id, rating):
@@ -274,6 +301,10 @@ class YonderDb(object):
 		else:
 			rated = vote[0]
 		return rated
+
+	def report_video(self,video_id, user_id):
+		query = "update videos set flag=flag+1 where video_id = '%s'" % (video_id)
+		self.execute(query)
 
 	def add_seen(self, user_id, video_ids):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
@@ -388,15 +419,12 @@ class YonderDb(object):
 		# 	return 1
 
 	def invited(self, user_id, invited_by):
-		ts = datetime.utcnow()
-		query = "update users set unlocked='%s' where user_id = '%s'" % (ts.strftime("%Y-%m-%d %H:%M:%S"), user_id)
-		self.execute(query)
 		query = "update users set tokens=tokens+5 where user_id like '%%%s%%'" % (invited_by)
 		self.execute(query)
 
-	def join_waitlist(self, user_id, email):
+	def join_waitlist(self, user_id, email, college):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "insert into waitlist (email, user_id, ts) values ('%s', '%s', '%s')  on duplicate key update email = '%s', ts = '%s'" % (email, user_id, ts, email, ts)
+		query = "insert into waitlist (email, college, user_id, ts) values ('%s', '%s', '%s', '%s')  on duplicate key update email = '%s', college = '%s', ts = '%s'" % (email, college, user_id, ts, email, college, ts)
 		self.execute(query)
 
 	### Notifications
@@ -589,8 +617,8 @@ class YonderDb(object):
 
 	### Cron
 
-	def cleanup(self):
-		oldest = datetime.utcnow() - timedelta(hours = 240)
+	def cleanup(self): # missing gold
+		oldest = datetime.utcnow() - timedelta(hours = 72)
 		ts = oldest.strftime("%Y-%m-%d %H:%M:%S")
 
 		query = "select video_id from videos V where V.removed_ts < '%s' and visible < 1" % ts
@@ -627,25 +655,25 @@ class YonderDb(object):
 
 	def cron_set_invisible(self):
 		ts = datetime.utcnow().strftime("%Y-%m-%d %H:%M:%S")
-		query = "update videos set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
+		query = "update videos set visible=-1, removed_ts = '%s' where rating + boost < -4 and visible = 1" % (ts)
 		self.execute(query)
 
 		# query = "update videos set removed_ts = '%s' where visible = 0 and removed_ts is null" % ts ##### CHANGE ME
 		# self.execute(query)
 
-		query = "update comments set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
-		self.execute(query)
-		query = "update channels set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
+		# query = "update comments set visible=-1, removed_ts = '%s' where rating < -4 and visible = 1" % ts
+		# self.execute(query)
+		query = "update channels set visible=-1, removed_ts = '%s' where rating < -10 and visible = 1 and user_id != '%s'" % (ts, adminkey)
 		self.execute(query)
 
-		query = "update channels C left join (select count(video_id) as count, sum(IFNULL(rating, 0)) as rating, channel_id from videos where visible = 1 and rating >=0 group by channel_id) V " \
+		query = "update channels C left join (select count(video_id) as count, sum(IFNULL(rating, 0)) as rating, channel_id from videos where visible = 1 and rating + boost > -2 group by channel_id) V " \
 				"on C.channel_id = V.channel_id set C.visible = -1 " \
 				"where TIMESTAMPDIFF(MINUTE, C.ts, now()) >= 15 and C.visible = 1 and IFNULL(V.count,0) = 0;"
 		self.execute(query)
 
-		query = "update channels set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
+		query = "update channels set visible=-2 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
 		self.execute(query)
-		query = "update videos set visible=-1 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
+		query = "update videos set visible=-2 where TIMESTAMPDIFF(HOUR, ts, now()) >= 24 and visible = 1 and user_id != '%s'" % adminkey
 		self.execute(query)
 
 	def fake_rating(self):

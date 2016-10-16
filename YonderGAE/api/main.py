@@ -22,8 +22,12 @@ class Videos(webapp2.RequestHandler):
 			caption = self.request.get("caption")
 			user_id = self.request.get("user")
 			channel = self.request.get("channel")
+			try:
+				college = self.request.get("college")
+			except Exception:
+				college = ""
 			upload = Upload()
-			upload.add_video(video, thumbnail, caption, user_id, channel)
+			upload.add_video(video, thumbnail, caption, user_id, channel, college)
 		except Exception:
 			logging.exception("Failed uploading the video")
 			out = {"success": 0}
@@ -251,8 +255,9 @@ class WaitList(webapp2.RequestHandler):
 		try:
 			user_id = self.request.POST["user"]
 			email = self.request.POST["email"]
+			college = self.request.POST["college"]
 			user = User()
-			user.join_waitlist(user_id, email)
+			user.join_waitlist(user_id, email, college)
 		except Exception:
 			logging.exception("Failed to join wait list")
 			out = {"success": 0}
@@ -321,10 +326,14 @@ class Channel(webapp2.RequestHandler):
 		try:
 			user_id = self.request.POST["user"]
 			channel_name = self.request.POST["channel"]
+			if "nsfw" not in self.request.POST:
+				nsfw = 0
+			else:
+				nsfw = self.request.POST["nsfw"]
 			channels = Channels()
-			channels.add_channel(channel_name, user_id)
+			channels.add_channel(channel_name, user_id, nsfw)
 		except Exception:
-			logging.exception("Failed to add a comment")
+			logging.exception("Failed to add a channel")
 			out = {"success": 0}
 			self.response.write(json.dumps(out))
 		else:

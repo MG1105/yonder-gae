@@ -8,7 +8,7 @@ class Util(object):
 	def email(subject, body, reply = ""):
 		from google.appengine.api import mail
 		sender_address = "yondervideos@gmail.com"
-		user_address = "support@yonderfeed.com"
+		user_address = "team@vidici.io"
 		if reply != "":
 			mail.send_mail(sender_address, user_address, subject, body, reply_to = reply)
 		else:

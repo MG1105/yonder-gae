@@ -72,9 +72,9 @@ class User(object):
 		yonderdb = YonderDb()
 		yonderdb.invited(user_id, invited_by)
 
-	def join_waitlist(self, user_id, email):
+	def join_waitlist(self, user_id, email, college):
 		yonderdb = YonderDb()
-		yonderdb.join_waitlist(user_id, email)
+		yonderdb.join_waitlist(user_id, email, college)
 
 
 

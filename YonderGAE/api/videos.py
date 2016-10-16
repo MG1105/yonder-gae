@@ -12,7 +12,7 @@ gcs.set_default_retry_params(my_default_retry_params)
 
 class Upload(object):
 
-	def add_video(self, video, thumbnail, caption, user_id, channel):
+	def add_video(self, video, thumbnail, caption, user_id, channel, college):
 		file_name = "/yander/" + video.filename
 		logging.info("Adding new video %s" % video.filename[:-4])
 		logging.debug("Caption '%s' User %s Channel %s" % (caption, user_id, channel))
@@ -39,7 +39,7 @@ class Upload(object):
 
 		gcs_file.close()
 		yonderdb = YonderDb()
-		yonderdb.add_video(video.filename[:-4], caption, user_id, channel)
+		yonderdb.add_video(video.filename[:-4], caption, user_id, channel, college)
 
 
 class Story(object):
@@ -72,7 +72,9 @@ class Video(object):
 		yonderdb = YonderDb()
 		yonderdb.rate_video(video_id, int(rating), user_id)
 
-
+	def add_flag(self, video_id, user_id):
+		yonderdb = YonderDb()
+		yonderdb.report_video(video_id, user_id)
 
 class Feed(object):
 
