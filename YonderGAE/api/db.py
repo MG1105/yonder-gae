@@ -145,10 +145,14 @@ class YonderDb(object):
 					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C right join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
 					"where C.visible = 1 and C.ts > (now() - INTERVAL 1 DAY) group by C.channel_id order by C.hot_score DESC limit 10"
 
-		if user_id == "10206282032162320":
+		if user_id == "10206453146920082":
 			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
 					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
-					"where C.visible = 1 and C.ts > (now() - INTERVAL 30 DAY) group by C.channel_id order by rating DESC limit 50"
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 30 DAY) group by C.channel_id order by C.ts DESC limit 50"
+		elif user_id == adminkey:
+			query = "select C.channel_id, C.name, sum(IFNULL(V.rating, 0)) + C.rating + sum(IFNULL(V.boost, 0)) as rating, count(V.video_id) as videos, " \
+					"(select username from users U where C.user_id = U.user_id) as username, unix_timestamp(C.ts), nsfw from channels C left join videos V on C.channel_id = V.channel_id and V.visible = 1 and V.rating >= 0 " \
+					"where C.visible = 1 and C.ts > (now() - INTERVAL 60 DAY) group by C.channel_id order by C.ts DESC"
 		self.execute(query)
 		for row in self.cur.fetchall():
 			rated = self.get_rated('channel', row[0], user_id)
@@ -252,7 +256,9 @@ class YonderDb(object):
 			if rating == "1":
 				rating = randint(10,15)
 			elif rating == "-1":
-				rating = -5
+				query = "update channels set visible=0 where channel_id = '%s'" % (channel_id)
+				self.execute(query)
+				return
 		row_count = self.add_vote(user_id, 'channel', channel_id, rating)
 		if row_count != 1 and user_id != adminkey: # Previously voted on this
 			if rating == "1":
@@ -269,7 +275,9 @@ class YonderDb(object):
 			if rating == 1:
 				rating = randint(50,100)
 			elif rating == -1:
-				rating = -5
+				query = "update videos set visible=0 where video_id = '%s'" % video_id
+				self.execute(query)
+				return
 		row_count = self.add_vote(user_id, 'video', video_id, rating)
 		if row_count != 1 and user_id != adminkey: # Previously voted on this
 			if rating == 1:
